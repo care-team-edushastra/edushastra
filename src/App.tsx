@@ -38,7 +38,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { apiRequest } from "@/src/lib/api";
-import { generateDailyQuestions } from "@/src/lib/gemini";
 import { 
   LineChart, 
   Line, 
@@ -1287,7 +1286,14 @@ function AdminDashboard({ user }: { user: UserProfile }) {
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      const questions = await generateDailyQuestions();
+      const response = await fetch("/api/generate-questions", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${localStorage.getItem("token")}`
+  }
+});
+const questions = await response.json();
       await apiRequest("/questions/save-unverified", {
         method: "POST",
         body: JSON.stringify({ questions })
