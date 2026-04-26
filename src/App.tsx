@@ -1205,7 +1205,7 @@ const handleReview = async (res: any) => {
                   <p className="font-bold text-slate-500">{res.skippedQuestions}</p>
                 </div>
               </div>
-              <Button variant="outline" className="gap-2">
+                          <Button variant="outline" className="gap-2" onClick={() => handleReview(res)}>
                 <Search size={16} />
                 Review
               </Button>
