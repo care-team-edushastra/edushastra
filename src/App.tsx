@@ -1302,7 +1302,7 @@ function Analytics({ user }: { user: UserProfile }) {
         <Card className="p-6 text-center">
           <p className="text-sm text-muted-foreground font-bold uppercase mb-2">Overall Accuracy</p>
           <div className="text-4xl font-black text-primary">
-            {results.length > 0 ? Math.round(results.reduce((a, b) => a + b.totalScore, 0) / results.length) : 0}%
+        {results?.length > 0 ? Math.round(results.reduce((a, b) => a + Number(b.totalScore), 0) / results.length): 0}%
           </div>
         </Card>
         <Card className="p-6 text-center">
