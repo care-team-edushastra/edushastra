@@ -371,12 +371,6 @@ function LoginPage({ onLogin }: { onLogin: (u: UserProfile) => void }) {
             </Button>
           </CardFooter>
         </form>
-        <div className="px-8 pb-8 text-center">
-          <p className="text-xs text-muted-foreground">
-            Demo: student@example.com / password123<br/>
-            Admin: admin@example.com / admin123
-          </p>
-        </div>
       </Card>
     </div>
   );
