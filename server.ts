@@ -305,7 +305,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 // 1. Define the generateDailyQuestions function OUTSIDE the route handlers
 export async function generateDailyQuestions(examType: "CAT" | "GMAT" | "CUET" = "CAT") {
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-  
+
   const prompt = `Generate 20 MCQ questions for ${examType} exam preparation.
     - 7 Quantitative Aptitude (Medium-Hard difficulty)
     - 7 DILR (Data Interpretation & Logical Reasoning)
@@ -320,7 +320,7 @@ export async function generateDailyQuestions(examType: "CAT" | "GMAT" | "CUET" =
     - difficulty: "Medium" | "Hard"`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-2.0-flash",          // use a real, available model name
     contents: prompt,
     config: {
       responseMimeType: "application/json",
@@ -329,12 +329,12 @@ export async function generateDailyQuestions(examType: "CAT" | "GMAT" | "CUET" =
         items: {
           type: Type.OBJECT,
           properties: {
-            section: { type: Type.STRING },
-            questionText: { type: Type.STRING },
-            options: { type: Type.ARRAY, items: { type: Type.STRING } },
-            correctAnswer: { type: Type.STRING },
-            explanation: { type: Type.STRING },
-            difficulty: { type: Type.STRING }
+            section:        { type: Type.STRING },
+            questionText:   { type: Type.STRING },
+            options:        { type: Type.ARRAY, items: { type: Type.STRING } },
+            correctAnswer:  { type: Type.STRING },
+            explanation:    { type: Type.STRING },
+            difficulty:     { type: Type.STRING }
           },
           required: ["section", "questionText", "options", "correctAnswer", "explanation", "difficulty"]
         }
@@ -345,30 +345,39 @@ export async function generateDailyQuestions(examType: "CAT" | "GMAT" | "CUET" =
   return JSON.parse(response.text());
 }
 
-// 2. Now use the function in your route handlers
-app.post("/api/chat", authenticateToken, async (req: any, res) => {
-  try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-    // ... your chat logic
-    res.json({ reply: result.response.text() });
-  } catch (err: any) {
-    console.error("Gemini API error:", err.message);
-    res.status(500).json({ error: "AI request failed" });
-  }
-});
+// ─── INSIDE startServer(), replace the broken duplicate blocks with these ──────
 
-app.post("/api/generate-questions", authenticateToken, async (req: any, res) => {
-  if (req.user.role !== 'admin') return res.sendStatus(403);
+  // Gemini chat proxy
+  app.post("/api/chat", authenticateToken, async (req: any, res) => {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+      const { message } = req.body;
 
-  try {
-    const examType = req.body.examType || "CAT"; // Get from request if provided
-    const questions = await generateDailyQuestions(examType);
-    res.json(questions);
-  } catch (err: any) {
-    console.error("Gemini error:", err.message);
-    res.status(500).json({ error: "Failed to generate questions" });
-  }
-});
+      const result = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: message,
+      });
+
+      res.json({ reply: result.text() });
+    } catch (err: any) {
+      console.error("Gemini API error:", err.message);
+      res.status(500).json({ error: "AI request failed" });
+    }
+  });
+
+  // Generate questions (admin only)
+  app.post("/api/generate-questions", authenticateToken, async (req: any, res) => {
+    if (req.user.role !== "admin") return res.sendStatus(403);
+
+    try {
+      const examType = req.body.examType || "CAT";
+      const questions = await generateDailyQuestions(examType);
+      res.json(questions);
+    } catch (err: any) {
+      console.error("Gemini error:", err.message);
+      res.status(500).json({ error: "Failed to generate questions" });
+    }
+  });
   // API Routes
   app.post("/api/login", async (req, res) => {
     const { email, password } = req.body;
