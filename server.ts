@@ -302,11 +302,11 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
   app.post("/api/generate-questions", authenticateToken, async (req: any, res) => {
   if (req.user.role !== 'admin') return res.sendStatus(403);
   
-// 1. Define the generateDailyQuestions function OUTSIDE the route handlers
-export async function generateDailyQuestions(examType: "CAT" | "GMAT" | "CUET" = "CAT") {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+try {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-  const prompt = `Generate 20 MCQ questions for ${examType} exam preparation.
+   const prompt = `Generate 20 MCQ questions for ${examType} exam preparation.
+    Distribution:
     - 7 Quantitative Aptitude (Medium-Hard difficulty)
     - 7 DILR (Data Interpretation & Logical Reasoning)
     - 6 VARC (Verbal Ability & Reading Comprehension)
@@ -319,65 +319,36 @@ export async function generateDailyQuestions(examType: "CAT" | "GMAT" | "CUET" =
     - explanation: string
     - difficulty: "Medium" | "Hard"`;
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.0-flash",          // use a real, available model name
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            section:        { type: Type.STRING },
-            questionText:   { type: Type.STRING },
-            options:        { type: Type.ARRAY, items: { type: Type.STRING } },
-            correctAnswer:  { type: Type.STRING },
-            explanation:    { type: Type.STRING },
-            difficulty:     { type: Type.STRING }
-          },
-          required: ["section", "questionText", "options", "correctAnswer", "explanation", "difficulty"]
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              section: { type: Type.STRING },
+              questionText: { type: Type.STRING },
+              options: { type: Type.ARRAY, items: { type: Type.STRING } },
+              correctAnswer: { type: Type.STRING },
+              explanation: { type: Type.STRING },
+              difficulty: { type: Type.STRING }
+            },
+            required: ["section", "questionText", "options", "correctAnswer", "explanation", "difficulty"]
+          }
         }
       }
-    }
-  });
+    });
 
-  return JSON.parse(response.text());
-}
-
-// ─── INSIDE startServer(), replace the broken duplicate blocks with these ──────
-
-  // Gemini chat proxy
-  app.post("/api/chat", authenticateToken, async (req: any, res) => {
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-      const { message } = req.body;
-
-      const result = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: message,
-      });
-
-      res.json({ reply: result.text() });
-    } catch (err: any) {
-      console.error("Gemini API error:", err.message);
-      res.status(500).json({ error: "AI request failed" });
-    }
-  });
-
-  // Generate questions (admin only)
-  app.post("/api/generate-questions", authenticateToken, async (req: any, res) => {
-    if (req.user.role !== "admin") return res.sendStatus(403);
-
-    try {
-      const examType = req.body.examType || "CAT";
-      const questions = await generateDailyQuestions(examType);
-      res.json(questions);
-    } catch (err: any) {
-      console.error("Gemini error:", err.message);
-      res.status(500).json({ error: "Failed to generate questions" });
-    }
-  });
+    const questions = JSON.parse(response.text);
+    res.json(questions);
+  } catch (err: any) {
+    console.error("Gemini error:", err.message);
+    res.status(500).json({ error: "Failed to generate questions" });
+  }
+});
   // API Routes
   app.post("/api/login", async (req, res) => {
     const { email, password } = req.body;
