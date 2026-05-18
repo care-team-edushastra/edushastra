@@ -52,14 +52,14 @@ if (SPREADSHEET_ID && GOOGLE_EMAIL && GOOGLE_KEY) {
  * Maps sheet names to column structures for automated serialization
  */
 const SHEET_CONFIG: Record<string, string[]> = {
-  Students: ["id", "email", "password", "name", "phone", "registrationDate", "status", "role"],
-  CourseMaterials: ["id", "topicName", "section", "googleSheetLink", "googleDriveLink", "description", "dateAdded"],
-  VideoLectures: ["id", "topicName", "section", "googleSheetLink", "googleDriveLink", "duration", "instructorName", "dateUploaded"],
-  UnverifiedQuestions: ["id", "section", "questionText", "options", "correctAnswer", "explanation", "difficulty"],
-  ApprovedQuestions: ["id", "section", "questionText", "options", "correctAnswer", "explanation", "difficulty", "approvedDate"],
+  Students: ["id", "email", "password", "name", "phone", "registrationDate", "status", "role", "targetExam"],
+  CourseMaterials: ["id", "topicName", "section", "googleSheetLink", "googleDriveLink", "description", "dateAdded", "targetExam"],
+  VideoLectures: ["id", "topicName", "section", "googleSheetLink", "googleDriveLink", "duration", "instructorName", "dateUploaded", "targetExam"],
+  UnverifiedQuestions: ["id", "section", "questionText", "options", "correctAnswer", "explanation", "difficulty", "targetExam"],
+  ApprovedQuestions: ["id", "section", "questionText", "options", "correctAnswer", "explanation", "difficulty", "approvedDate", "targetExam"],
   DailyTests: ["id", "testDate", "questionIds"],
   TestResults: ["id", "studentId", "testDate", "testId", "totalScore", "correctAnswers", "wrongAnswers", "skippedQuestions", "timeSpent", "sectionScores", "studentAnswers"],
-  Announcements: ["id", "title", "content", "createdDate", "createdBy"]
+  Announcements: ["id", "title", "content", "createdDate", "createdBy", "targetExam"]
 };
 
 /**
@@ -204,7 +204,8 @@ const initialDB: DB = {
       phone: "1234567890",
       registrationDate: new Date().toISOString(),
       status: "Active",
-      role: "student"
+      role: "student",
+      targetExam: "CAT"
     },
     {
       id: "A001",
@@ -214,7 +215,8 @@ const initialDB: DB = {
       phone: "0987654321",
       registrationDate: new Date().toISOString(),
       status: "Active",
-      role: "admin"
+      role: "admin",
+       targetExam: "ALL"
     }
   ],
   courseMaterials: [
@@ -225,7 +227,8 @@ const initialDB: DB = {
       googleSheetLink: "#",
       googleDriveLink: "#",
       description: "Basics of Number Systems for CAT.",
-      dateAdded: new Date().toISOString()
+      dateAdded: new Date().toISOString(),
+       targetExam: "CAT"
     }
   ],
   videoLectures: [
@@ -237,7 +240,8 @@ const initialDB: DB = {
       googleDriveLink: "#",
       duration: 45,
       instructorName: "Expert Tutor",
-      dateUploaded: new Date().toISOString()
+      dateUploaded: new Date().toISOString(),
+       targetExam: "CAT"
     }
   ],
   unverifiedQuestions: [],
@@ -378,13 +382,13 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
     if (isMatch) {
       const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role, name: user.name }, 
+        { id: user.id, email: user.email, role: user.role, name: user.name, targetExam: user.targetExam }, 
         JWT_SECRET, 
         { expiresIn: '24h' }
       );
       res.json({ 
         token, 
-        user: { id: user.id, email: user.email, role: user.role, name: user.name } 
+        user: { id: user.id, email: user.email, role: user.role, name: user.name, targetExam: user.targetExam } 
       });
     } else {
       console.warn(`Login failed: Incorrect password for ${email}`);
@@ -403,12 +407,20 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
     }
   });
 
-  app.get("/api/course-materials", authenticateToken, async (req, res) => {
-    res.json(await fetchSheetData("CourseMaterials") || getLocalDB().courseMaterials);
+  app.get("/api/course-materials", authenticateToken, async (req: any, res) => {
+    const materials = await fetchSheetData("CourseMaterials") || getLocalDB().courseMaterials;
+    if (req.user.role === 'student') {
+      return res.json(materials.filter((m: any) => m.targetExam === req.user.targetExam));
+    }
+    res.json(materials);
   });
 
-  app.get("/api/video-lectures", authenticateToken, async (req, res) => {
-    res.json(await fetchSheetData("VideoLectures") || getLocalDB().videoLectures);
+ app.get("/api/video-lectures", authenticateToken, async (req: any, res) => {
+    const videos = await fetchSheetData("VideoLectures") || getLocalDB().videoLectures;
+    if (req.user.role === 'student') {
+      return res.json(videos.filter((v: any) => v.targetExam === req.user.targetExam));
+    }
+    res.json(videos);
   });
 
   app.post("/api/course-materials", authenticateToken, async (req: any, res) => {
@@ -435,20 +447,49 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
     res.json({ success: true });
   });
 
-  app.get("/api/announcements", authenticateToken, async (req, res) => {
-    res.json(await fetchSheetData("Announcements") || getLocalDB().announcements);
+   app.get("/api/announcements", authenticateToken, async (req: any, res) => {
+    const anns = await fetchSheetData("Announcements") || getLocalDB().announcements;
+    if (req.user.role === 'student') {
+      return res.json(anns.filter((a: any) => a.targetExam === "ALL" || a.targetExam === req.user.targetExam));
+    }
+    res.json(anns);
+  });
+
+  // Student Management
+  app.get("/api/students", authenticateToken, async (req: any, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const students = await fetchSheetData("Students") || getLocalDB().students;
+    res.json(students.filter(s => s.role === 'student'));
+  });
+
+  app.patch("/api/students/:id", authenticateToken, async (req: any, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { id } = req.params;
+    const { targetExam, status } = req.body;
+
+    const db = getLocalDB();
+    const studentIdx = db.students.findIndex(s => s.id === id);
+    if (studentIdx !== -1) {
+      if (targetExam) db.students[studentIdx].targetExam = targetExam;
+      if (status) db.students[studentIdx].status = status;
+      saveLocalDB(db);
+      // Note: Updating specific rows in Sheets is complex, so we rely on local/revisit later if needed
+      res.json(db.students[studentIdx]);
+    } else {
+      res.status(404).json({ message: "Student not found" });
+    }
   });
 
   app.post("/api/daily-test/publish", authenticateToken, async (req: any, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
-    const { testDate, questionIds } = req.body; // testDate format: YYYY-MM-DD
+   const { testDate, questionIds, targetExam } = req.body; // testDate format: YYYY-MM-DD
     
-    if (!testDate || !questionIds || !Array.isArray(questionIds) || questionIds.length === 0) {
-      return res.status(400).json({ message: "Invalid test data" });
+    if (!testDate || !questionIds || !Array.isArray(questionIds) || questionIds.length === 0 || !targetExam) {
+      return res.status(400).json({ message: "Invalid test data (exam category required)" });
     }
 
     const testId = `DT${Date.now()}`;
-    const newTest = { id: testId, testDate, questionIds };
+ const newTest = { id: testId, testDate, questionIds, targetExam };
     
     await appendSheetData("DailyTests", newTest);
     
@@ -512,8 +553,12 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
     res.json({ success: true });
   });
 
-  app.get("/api/daily-tests", authenticateToken, async (req, res) => {
-    const dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
+ app.get("/api/daily-tests", authenticateToken, async (req: any, res) => {
+    let dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
+    
+    if (req.user.role === 'student') {
+      dailyTests = dailyTests.filter((t: any) => t.targetExam === req.user.targetExam);
+    }
     // Return all tests sorted by date (latest first)
     const sortedTests = [...dailyTests].sort((a, b) => b.testDate.localeCompare(a.testDate));
     res.json(sortedTests);
