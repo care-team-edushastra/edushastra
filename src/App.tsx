@@ -1412,20 +1412,23 @@ function AdminDashboard({ user }: { user: UserProfile }) {
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      const response = await fetch("/api/generate-questions (examType)", {
+      const response = await fetch(`/api/generate-questions/${examType}`, {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
     "Authorization": `Bearer ${localStorage.getItem("token")}`
   }
 });
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
 const questions = await response.json();
       await apiRequest("/questions/save-unverified", {
         method: "POST",
         body: JSON.stringify({ questions })
       });
       refreshQueue();
-      toast.success("Generated 20 new $(examType) questions!");
+      toast.success(`Generated 20 new ${examType} questions!`);
     } catch (err: any) {
       toast.error("Generation failed: " + err.message);
     } finally {
