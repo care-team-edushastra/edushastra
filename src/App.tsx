@@ -1409,23 +1409,30 @@ function AdminDashboard({ user }: { user: UserProfile }) {
     }
   };
 
- const handleGenerate = async () => {
+  const handleGenerate = async () => {
     setGenerating(true);
     try {
-      const questions = await generateDailyQuestions(examType);
-      const questionsWithExam = questions.map((q: any) => ({ ...q, targetExam: examType }));
+      const response = await fetch("/api/generate-questions (examType)", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${localStorage.getItem("token")}`
+  }
+});
+const questions = await response.json();
       await apiRequest("/questions/save-unverified", {
         method: "POST",
-        body: JSON.stringify({ questions: questionsWithExam })
+        body: JSON.stringify({ questions })
       });
       refreshQueue();
-      toast.success(`Generated 20 new ${examType} questions!`);
+      toast.success("Generated 20 new $(examType) questions!");
     } catch (err: any) {
       toast.error("Generation failed: " + err.message);
     } finally {
       setGenerating(false);
     }
   };
+
 
   const handleVerify = async (ids: string[], action: 'approve' | 'reject') => {
     try {
