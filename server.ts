@@ -306,17 +306,19 @@ try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
   const prompt = `Generate exactly 20 multiple-choice exam questions for ${examType} exam. 
-    Distribute them across sections: 7 Quantitative, 7 DILR, 6 VARC.
-    
-    Return ONLY valid JSON array with this exact structure for each question:
-    {
-      "questionText": "string",
-      "section": "Quantitative" | "DILR" | "VARC",
-      "options": ["A", "B", "C", "D"],
-      "correctAnswer": "A",
-      "explanation": "string",
-      "difficulty": "Easy" | "Medium" | "Hard",
-      "targetExam": "${examType}"
+    Distribution:
+    - 7 Quantitative Aptitude (Medium-Hard difficulty)
+    - 7 DILR (Data Interpretation & Logical Reasoning)
+    - 6 VARC (Verbal Ability & Reading Comprehension)
+    Return exactly 20 questions in JSON format.
+    Each question must have:
+    - section: "Quantitative" | "DILR" | "VARC"
+    - questionText: string
+    - options: string[] (exactly 4)
+    - correctAnswer: string (one of the options)
+    - explanation: string
+    - difficulty: "Medium" | "Hard"
+    - targetExam: "${examType}"`
     }
 
     const response = await ai.models.generateContent({
@@ -337,7 +339,7 @@ try {
               difficulty: { type: Type.STRING },
               targetExam: { type: Type.STRING }
             },
-            required: ["section", "questionText", "options", "correctAnswer", "explanation", "difficulty"]
+            required: ["section", "questionText", "options", "correctAnswer", "explanation", "difficulty", "targetExam"]
           }
         }
       }
