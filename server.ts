@@ -558,9 +558,6 @@ try {
  app.get("/api/daily-tests", authenticateToken, async (req: any, res) => {
     let dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
     
-    if (req.user.role === 'student') {
-      dailyTests = dailyTests.filter((t: any) => t.targetExam === req.user.targetExam);
-    }
     // Return all tests sorted by date (latest first)
     const sortedTests = [...dailyTests].sort((a, b) => b.testDate.localeCompare(a.testDate));
     res.json(sortedTests);
