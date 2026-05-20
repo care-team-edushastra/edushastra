@@ -849,7 +849,7 @@ function DailyTest({ user }: { user: UserProfile }) {
                     )}
                   </div>
                    </div>
-                  <CardTitle className="text-lg"> Practice Test</CardTitle>
+                <CardTitle className="text-lg">{t.name || "Practice Test"}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-muted-foreground mb-4">
@@ -895,8 +895,8 @@ function DailyTest({ user }: { user: UserProfile }) {
           </Button>
         </div>
         <header className="text-center space-y-2">
-          <h1 className="text-3xl font-bold">Test Results</h1>
-          <p className="text-muted-foreground">Great job completing this practice set!</p>
+       <h1 className="text-3xl font-bold">{test?.name || "Test Results"}</h1>
+<p className="text-muted-foreground">Results for: {test?.name || "Practice Test"}</p>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1339,6 +1339,7 @@ function AdminDashboard({ user }: { user: UserProfile }) {
     topicName: "", section: "Quantitative", googleSheetLink: "", googleDriveLink: "", duration: "", instructorName: "", targetExam: "CAT" as any
   });
   const [examType, setExamType] = useState<"CAT" | "GMAT" | "CUET">("CAT");
+  const [testName, setTestName] = useState("");
 
 
   useEffect(() => {
@@ -1466,11 +1467,13 @@ function AdminDashboard({ user }: { user: UserProfile }) {
         body: JSON.stringify({
           testDate: today,
           questionIds: selectedIds,
-          targetExam: examType
+          targetExam: examType,
+          name: testName     
         })
       });
       
       toast.success(`${examType} test published for today!`);
+      setTestName(""); 
     } catch (err: any) {
       toast.error("Publication failed: " + err.message);
     } finally {
@@ -1708,37 +1711,48 @@ function AdminDashboard({ user }: { user: UserProfile }) {
               <CardTitle>Daily Test Controller</CardTitle>
               <CardDescription>Select a category and publish today's random test set.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex justify-center gap-4">
-                <Select value={examType} onValueChange={(v: any) => setExamType(v)}>
-                  <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="CAT">CAT</SelectItem>
-                    <SelectItem value="GMAT">GMAT</SelectItem>
-                    <SelectItem value="CUET">CUET</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button size="lg" onClick={handlePublishTest} disabled={publishing}>
-                  {publishing ? "Publishing..." : `Publish Today's ${examType} Test`}
-                </Button>
-              </div>
-              <div className="p-6 bg-secondary/20 rounded-2xl border border-dashed text-center">
-                <p className="text-sm text-muted-foreground">
-                  Note: Publishing picks the 20 most recent approved questions for the selected category that haven't been recently used in a test.
-                </p>
-                <div className="mt-4 flex justify-center gap-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold">{approved.filter(q => q.targetExam === examType).length}</div>
-                    <div className="text-[10px] uppercase font-bold text-muted-foreground">Available</div>
-                  </div>
-                  <div className="w-px h-8 bg-border" />
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">20</div>
-                    <div className="text-[10px] uppercase font-bold text-muted-foreground">Required</div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
+<CardContent className="space-y-6">
+  <div className="space-y-2">
+    <Label>Test Name</Label>
+    <Input
+      placeholder="e.g. The Quant Blitz"
+      value={testName}
+      onChange={e => setTestName(e.target.value)}
+    />
+  </div>
+
+  <div className="flex justify-center gap-4">
+    <Select value={examType} onValueChange={(v: any) => setExamType(v)}>
+      <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+      <SelectContent>
+        <SelectItem value="CAT">CAT</SelectItem>
+        <SelectItem value="GMAT">GMAT</SelectItem>
+        <SelectItem value="CUET">CUET</SelectItem>
+      </SelectContent>
+    </Select>
+    <Button size="lg" onClick={handlePublishTest} disabled={publishing}>
+      {publishing ? "Publishing..." : `Publish Today's ${examType} Test`}
+    </Button>
+  </div>
+
+  <div className="p-6 bg-secondary/20 rounded-2xl border border-dashed text-center">
+    <p className="text-sm text-muted-foreground">
+      Note: Publishing picks the 20 most recent approved questions for the selected category that haven't been recently used in a test.
+    </p>
+    <div className="mt-4 flex justify-center gap-4">
+      <div className="text-center">
+        <div className="text-2xl font-bold">{approved.filter(q => q.targetExam === examType).length}</div>
+        <div className="text-[10px] uppercase font-bold text-muted-foreground">Available</div>
+      </div>
+      <div className="w-px h-8 bg-border" />
+      <div className="text-center">
+        <div className="text-2xl font-bold text-green-600">20</div>
+        <div className="text-[10px] uppercase font-bold text-muted-foreground">Required</div>
+      </div>
+    </div>
+  </div>
+
+</CardContent>
           </Card>
         </TabsContent>
       </Tabs>
