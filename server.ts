@@ -57,7 +57,7 @@ const SHEET_CONFIG: Record<string, string[]> = {
   VideoLectures: ["id", "topicName", "section", "googleSheetLink", "googleDriveLink", "duration", "instructorName", "dateUploaded", "targetExam"],
   UnverifiedQuestions: ["id", "section", "questionText", "options", "correctAnswer", "explanation", "difficulty", "targetExam"],
   ApprovedQuestions: ["id", "section", "questionText", "options", "correctAnswer", "explanation", "difficulty", "approvedDate", "targetExam"],
-  DailyTests: ["id", "testDate", "questionIds", "targetExam"],
+  DailyTests: ["id", "testDate", "questionIds", "targetExam", "name"],
   TestResults: ["id", "studentId", "testDate", "testId", "totalScore", "correctAnswers", "wrongAnswers", "skippedQuestions", "timeSpent", "sectionScores", "studentAnswers"],
   Announcements: ["id", "title", "content", "createdDate", "createdBy", "targetExam"]
 };
@@ -484,14 +484,14 @@ try {
 
   app.post("/api/daily-test/publish", authenticateToken, async (req: any, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
-   const { testDate, questionIds, targetExam } = req.body; // testDate format: YYYY-MM-DD
+   const { testDate, questionIds, targetExam, name } = req.body; // testDate format: YYYY-MM-DD
     
     if (!testDate || !questionIds || !Array.isArray(questionIds) || questionIds.length === 0 || !targetExam) {
       return res.status(400).json({ message: "Invalid test data (exam category required)" });
     }
 
     const testId = `DT${Date.now()}`;
- const newTest = { id: testId, testDate, questionIds, targetExam };
+ const newTest = { id: testId, testDate, questionIds, targetExam, name: name || `Practice Test ${testDate}` };
     
     await appendSheetData("DailyTests", newTest);
     
