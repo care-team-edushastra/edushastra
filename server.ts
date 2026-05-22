@@ -305,11 +305,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-  const prompt = `Generate exactly 20 multiple-choice exam questions for ${examType} exam. 
-    Distribution:
-    - 7 Quantitative Aptitude (Medium-Hard difficulty)
-    - 7 DILR (Data Interpretation & Logical Reasoning)
-    - 6 VARC (Verbal Ability & Reading Comprehension)
+  const prompt = `Generate exactly 20 multiple-choice exam questions on Time speed and Distance of ${examType} exam. 
     Return exactly 20 questions in JSON format.
     Each question must have:
     - section: "Quantitative" | "DILR" | "VARC"
