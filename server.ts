@@ -299,9 +299,9 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
       res.status(500).json({ error: "AI request failed" });
     }
   });
-  app.post("/api/generate-questions", authenticateToken, async (req: any, res) => {
+  app.post("/api/generate-questions/:examType", authenticateToken, async (req: any, res) => {
   if (req.user.role !== 'admin') return res.sendStatus(403);
-  
+   const { examType } = req.params;
 try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
