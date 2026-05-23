@@ -616,7 +616,23 @@ try {
 
   app.get("/api/performance", authenticateToken, async (req: any, res) => {
     const results = await fetchSheetData("TestResults") || getLocalDB().testResults;
-    res.json(results.filter(r => r.studentId === req.user.id));
+    const userResults = results.filter(r => r.studentId === req.user.id);
+    
+    try {
+      const dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
+      const enriched = userResults.map(r => {
+        const test = dailyTests.find((t: any) => t.id === r.testId);
+        return {
+          ...r,
+          targetExam: test ? test.targetExam : null,
+          testName: test ? `${test.targetExam} Daily Test` : "Practice Test",
+          name: test ? `${test.targetExam} Daily Test` : "Practice Test"
+        };
+      });
+      res.json(enriched);
+    } catch (err) {
+      res.json(userResults.map(r => ({ ...r, testName: "Practice Test", name: "Practice Test" })));
+    }
   });
 
   // Vite middleware for development or fallback
