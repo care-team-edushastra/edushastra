@@ -1006,13 +1006,13 @@ function DailyTest({ user }: { user: UserProfile }) {
                   key={opt}
                   className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
                     answers[currentQ.id] === opt 
-                      ? "border-primary bg-primary/5 ring-1 ring-primary" 
+                      ? "border-primary bg-blue-50 ring-1 ring-primary" 
                       : "hover:border-primary/30 hover:bg-secondary/50"
                   }`}
                 >
                   <RadioGroupItem value={opt} id={`q-${idx}`} className="sr-only" />
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold border ${
-                    answers[currentQ.id] === opt ? "bg-primary text-white border-primary" : "bg-secondary text-muted-foreground"
+                    answers[currentQ.id] === opt ? "bg-blue-500 text-white border-blue-500" : "bg-secondary text-muted-foreground"
                   }`}>
                     {String.fromCharCode(65 + idx)}
                   </div>
@@ -1063,7 +1063,7 @@ function DailyTest({ user }: { user: UserProfile }) {
               className={`h-10 rounded-lg font-bold text-xs transition-all ${
                 currentQuestionIndex === idx ? "ring-2 ring-primary ring-offset-2" : ""
               } ${
-                answers[test.questions[idx].id] ? "bg-primary text-white" : "bg-secondary text-muted-foreground"
+                answers[test.questions[idx].id] ? "bg-blue-500 text-white" : "bg-secondary text-muted-foreground"
               }`}
             >
               {idx + 1}
