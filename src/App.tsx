@@ -1195,7 +1195,7 @@ const handleReview = async (res: any) => {
                   <span className="text-[10px] opacity-80">%</span>
                 </div>
                 <div>
-                  <h3 className="font-bold text-lg"> Test</h3>
+                  <h3 className="font-bold text-lg">{res.testName || res.name || "Test"}</h3>
                   <p className="text-sm text-muted-foreground">{new Date(res.testDate).toLocaleDateString()} • {Math.floor(res.timeSpent / 60)}m spent</p>
                 </div>
               </div>
