@@ -58,7 +58,7 @@ const SHEET_CONFIG: Record<string, string[]> = {
   UnverifiedQuestions: ["id", "section", "questionText", "options", "correctAnswer", "explanation", "difficulty", "targetExam"],
   ApprovedQuestions: ["id", "section", "questionText", "options", "correctAnswer", "explanation", "difficulty", "approvedDate", "targetExam"],
   DailyTests: ["id", "testDate", "questionIds", "targetExam", "name"],
-  TestResults: ["id", "studentId", "testDate", "testId", "totalScore", "correctAnswers", "wrongAnswers", "skippedQuestions", "timeSpent", "sectionScores", "studentAnswers"],
+  TestResults: ["id", "studentId", "testDate", "testId", "totalScore", "correctAnswers", "wrongAnswers", "skippedQuestions", "timeSpent", "sectionScores", "studentAnswers",  "name"],
   Announcements: ["id", "title", "content", "createdDate", "createdBy", "targetExam"]
 };
 
