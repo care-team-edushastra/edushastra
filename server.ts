@@ -305,7 +305,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-  const prompt = `Generate exactly 20 multiple-choice exam questions on Simple and Compound Interest of ${examType} exam. 
+  const prompt = `Generate exactly 20 multiple-choice exam questions on Linear Equations of ${examType} exam. 
     Return exactly 20 questions in JSON format.
     Each question must have:
     - section: "Quantitative" | "DILR" | "VARC"
