@@ -22,7 +22,8 @@ import {
   ExternalLink,
   BrainCircuit,
   History,
-  Presentation
+  Presentation,
+  HelpCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
@@ -462,19 +463,42 @@ function Dashboard({ user, setActiveTab }: { user: UserProfile, setActiveTab: (t
               { label: "Videos", icon: Video, tab: "videos", color: "bg-purple-500" },
               { label: "Analytics", icon: BarChart3, tab: "analytics", color: "bg-green-500" },
               { label: "History", icon: History, tab: "history", color: "bg-slate-500" },
-              { label: "Profile", icon: User, tab: "profile", color: "bg-pink-500" },
-            ].map((item) => (
+              { label: "Doubt Solving", icon: HelpCircle, link: "https://www.edushastra.com/", color: "bg-pink-500" },
+            ].map((item: any) => {
+              const Icon = item.icon;
+              const content = (
+                <>
+                  <div className={`${item.color} p-3 rounded-xl text-white mb-3 group-hover:scale-110 transition-transform`}>
+                    <Icon size={24} />
+                  </div>
+                  <span className="font-semibold text-sm">{item.label}</span>
+                </>
+              );
+
+              if (item.link) {
+                return (
+                  <a
+                    key={item.label}
+                    href={item.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex flex-col items-center justify-center p-6 bg-background rounded-2xl border shadow-sm hover:shadow-md hover:border-primary/50 transition-all text-center"
+                  >
+                    {content}
+                  </a>
+                );
+              }
+
+              return (
               <button
                 key={item.label}
                 onClick={() => setActiveTab(item.tab)}
-                className="group flex flex-col items-center justify-center p-6 bg-background rounded-2xl border shadow-sm hover:shadow-md hover:border-primary/50 transition-all"
+                className="group flex flex-col items-center justify-center p-6 bg-background rounded-2xl border shadow-sm hover:shadow-md hover:border-primary/50 transition-all text-center"
               >
-                <div className={`${item.color} p-3 rounded-xl text-white mb-3 group-hover:scale-110 transition-transform`}>
-                  <item.icon size={24} />
-                </div>
-                <span className="font-semibold text-sm">{item.label}</span>
+                {content}
               </button>
-            ))}
+            );
+            })}
           </div>
         </div>
 
