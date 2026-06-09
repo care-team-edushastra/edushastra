@@ -677,12 +677,42 @@ function VideoLectures() {
             </div>
           ) : filtered.map((video) => video && (
             <Card key={video.id} className="overflow-hidden group hover:shadow-xl transition-all">
-              <div className="aspect-video bg-slate-100 relative flex items-center justify-center">
-                <PlayCircle className="text-primary/40 group-hover:text-primary group-hover:scale-110 transition-all" size={64} />
-                <div className="absolute bottom-3 right-3 bg-black/70 text-white text-[10px] font-bold px-2 py-1 rounded">
-                  {video.duration} MIN
-                </div>
-              </div>
+              <div className="aspect-video bg-slate-100 relative flex items-center justify-center overflow-hidden group">
+  {/* Thumbnail */}
+  {(() => {
+    const ytMatch = video.url?.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    const driveMatch = video.url?.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    const thumbnail = ytMatch
+      ? `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`
+      : driveMatch
+      ? `https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w640`
+      : null;
+
+    return thumbnail ? (
+      <img
+        src={thumbnail}
+        alt={video.title}
+        className="absolute inset-0 w-full h-full object-cover"
+      />
+    ) : (
+      <div className="absolute inset-0 w-full h-full bg-slate-200" />
+    );
+  })()}
+
+  {/* Dark overlay */}
+  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-all" />
+
+  {/* Play button */}
+  <PlayCircle
+    className="relative z-10 text-white/80 group-hover:text-white group-hover:scale-110 transition-all drop-shadow-lg"
+    size={64}
+  />
+
+  {/* Duration badge */}
+  <div className="absolute bottom-3 right-3 bg-black/70 text-white text-[10px] font-bold px-2 py-1 rounded z-10">
+    {video.duration} MIN
+  </div>
+</div>
               <CardHeader className="p-5">
                 <div className="flex items-center gap-2 mb-2">
                   <Badge variant="outline" className="text-[10px] uppercase tracking-tighter">{video.section}</Badge>
