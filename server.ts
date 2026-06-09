@@ -271,7 +271,36 @@ function getLocalDB(): DB {
 function saveLocalDB(db: DB) {
   fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 }
+function isAfterEnrollment(contentDateStr: string | undefined, enrollmentDateStr: string | undefined): boolean {
+  if (!enrollmentDateStr) return true;
+  if (!contentDateStr) return true;
+  try {
+    const contentDate = new Date(contentDateStr);
+    const enrollmentDate = new Date(enrollmentDateStr);
+    if (isNaN(contentDate.getTime()) || isNaN(enrollmentDate.getTime())) {
+      return true;
+    }
+    // Set both to midnight UTC of that day to compare calendar date
+    const cMidnight = Date.UTC(contentDate.getUTCFullYear(), contentDate.getUTCMonth(), contentDate.getUTCDate());
+    const eMidnight = Date.UTC(enrollmentDate.getUTCFullYear(), enrollmentDate.getUTCMonth(), enrollmentDate.getUTCDate());
+    return cMidnight >= eMidnight;
+  } catch (err) {
+    return true;
+  }
+}
 
+async function getStudentRegistrationDate(reqUser: any): Promise<string | undefined> {
+  if (reqUser.registrationDate) {
+    return reqUser.registrationDate;
+  }
+  try {
+    const students = await fetchSheetData("Students") || getLocalDB().students;
+    const student = students.find((s: any) => s.id === reqUser.id);
+    return student?.registrationDate;
+  } catch (err) {
+    return undefined;
+  }
+}
 async function startServer() {
   const app = express();
   app.use(express.json());
@@ -380,13 +409,13 @@ try {
 
     if (isMatch) {
       const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role, name: user.name, targetExam: user.targetExam }, 
+  { id: user.id, email: user.email, role: user.role, name: user.name, targetExam: user.targetExam, registrationDate: user.registrationDate }, 
         JWT_SECRET, 
         { expiresIn: '24h' }
       );
       res.json({ 
         token, 
-        user: { id: user.id, email: user.email, role: user.role, name: user.name, targetExam: user.targetExam } 
+      user: { id: user.id, email: user.email, role: user.role, name: user.name, targetExam: user.targetExam, registrationDate: user.registrationDate } 
       });
     } else {
       console.warn(`Login failed: Incorrect password for ${email}`);
@@ -408,7 +437,8 @@ try {
   app.get("/api/course-materials", authenticateToken, async (req: any, res) => {
     const materials = await fetchSheetData("CourseMaterials") || getLocalDB().courseMaterials;
     if (req.user.role === 'student') {
-      return res.json(materials.filter((m: any) => m.targetExam === req.user.targetExam));
+      const regDate = await getStudentRegistrationDate(req.user);
+      return res.json(materials.filter((m: any) => m.targetExam === req.user.targetExam && isAfterEnrollment(m.dateAdded, regDate)));
     }
     res.json(materials);
   });
@@ -416,7 +446,8 @@ try {
  app.get("/api/video-lectures", authenticateToken, async (req: any, res) => {
     const videos = await fetchSheetData("VideoLectures") || getLocalDB().videoLectures;
     if (req.user.role === 'student') {
-      return res.json(videos.filter((v: any) => v.targetExam === req.user.targetExam));
+ const regDate = await getStudentRegistrationDate(req.user);
+      return res.json(videos.filter((v: any) => v.targetExam === req.user.targetExam && isAfterEnrollment(v.dateUploaded, regDate)));
     }
     res.json(videos);
   });
@@ -448,7 +479,8 @@ try {
    app.get("/api/announcements", authenticateToken, async (req: any, res) => {
     const anns = await fetchSheetData("Announcements") || getLocalDB().announcements;
     if (req.user.role === 'student') {
-      return res.json(anns.filter((a: any) => a.targetExam === "ALL" || a.targetExam === req.user.targetExam));
+    const regDate = await getStudentRegistrationDate(req.user);
+      return res.json(anns.filter((a: any) => (a.targetExam === "ALL" || a.targetExam === req.user.targetExam) && isAfterEnrollment(a.createdDate, regDate)));
     }
     res.json(anns);
   });
@@ -559,12 +591,18 @@ try {
     res.json(sortedTests);
   });
 
-  app.get("/api/daily-test/:id", authenticateToken, async (req, res) => {
+ app.get("/api/daily-test/:id", authenticateToken, async (req: any, res) => {
     const { id } = req.params;
     const dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
     const test = dailyTests.find(t => t.id === id);
     
     if (test) {
+        if (req.user.role === 'student') {
+        const regDate = await getStudentRegistrationDate(req.user);
+        if (!isAfterEnrollment(test.testDate, regDate) || test.targetExam !== req.user.targetExam) {
+          return res.status(403).json({ message: "You are not authorized to access this test." });
+        }
+      }
       const approved = await fetchSheetData("ApprovedQuestions") || getLocalDB().approvedQuestions;
       const questions = approved.filter(q => test.questionIds.includes(q.id));
       res.json({ ...test, questions });
@@ -573,12 +611,18 @@ try {
     }
   });
 
-  app.get("/api/daily-test", authenticateToken, async (req, res) => {
+ app.get("/api/daily-test", authenticateToken, async (req: any, res) => {
     const today = new Date().toISOString().split('T')[0];
     const dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
     const test = dailyTests.find(t => t.testDate === today);
     
     if (test) {
+      if (req.user.role === 'student') {
+        const regDate = await getStudentRegistrationDate(req.user);
+        if (!isAfterEnrollment(test.testDate, regDate) || test.targetExam !== req.user.targetExam) {
+          return res.status(403).json({ message: "No test available for today." });
+        }
+      }
       const approved = await fetchSheetData("ApprovedQuestions") || getLocalDB().approvedQuestions;
       const questions = approved.filter(q => test.questionIds.includes(q.id));
       res.json({ ...test, questions });
