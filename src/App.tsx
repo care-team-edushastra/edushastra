@@ -677,39 +677,23 @@ function VideoLectures() {
             </div>
           ) : filtered.map((video) => video && (
             <Card key={video.id} className="overflow-hidden group hover:shadow-xl transition-all">
-              {console.log("URL:", video.url, "YT:", video.url?.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/), "Drive:", video.url?.match(/\/d\/([a-zA-Z0-9_-]+)/))}
-              <div className="aspect-video bg-slate-100 relative flex items-center justify-center overflow-hidden group">
-  {/* Thumbnail */}
+     <div className="aspect-video bg-slate-100 relative flex items-center justify-center overflow-hidden">
   {(() => {
-    const ytMatch = video.url?.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-    const driveMatch = video.url?.match(/\/d\/([a-zA-Z0-9_-]+)/);
-    const thumbnail = ytMatch
-      ? `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`
-      : driveMatch
-      ? `https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w640`
-      : null;
-
-    return thumbnail ? (
+    const driveMatch = video.googleDriveLink?.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    const idMatch = video.googleDriveLink?.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    const fileId = driveMatch?.[1] || idMatch?.[1];
+    return fileId ? (
       <img
-        src={thumbnail}
-        alt={video.title}
+        src={`https://drive.google.com/thumbnail?id=${fileId}&sz=w640`}
+        alt={video.topicName}
         className="absolute inset-0 w-full h-full object-cover"
       />
     ) : (
-      <div className="absolute inset-0 w-full h-full bg-slate-200" />
+      <div className="absolute inset-0 bg-slate-200" />
     );
   })()}
-
-  {/* Dark overlay */}
   <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-all" />
-
-  {/* Play button */}
-  <PlayCircle
-    className="relative z-10 text-white/80 group-hover:text-white group-hover:scale-110 transition-all drop-shadow-lg"
-    size={64}
-  />
-
-  {/* Duration badge */}
+  <PlayCircle className="relative z-10 text-white/80 group-hover:text-white group-hover:scale-110 transition-all drop-shadow-lg" size={64} />
   <div className="absolute bottom-3 right-3 bg-black/70 text-white text-[10px] font-bold px-2 py-1 rounded z-10">
     {video.duration} MIN
   </div>
