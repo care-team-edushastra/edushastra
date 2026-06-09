@@ -677,6 +677,7 @@ function VideoLectures() {
             </div>
           ) : filtered.map((video) => video && (
             <Card key={video.id} className="overflow-hidden group hover:shadow-xl transition-all">
+              {console.log("URL:", video.url, "YT:", video.url?.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/), "Drive:", video.url?.match(/\/d\/([a-zA-Z0-9_-]+)/))}
               <div className="aspect-video bg-slate-100 relative flex items-center justify-center overflow-hidden group">
   {/* Thumbnail */}
   {(() => {
