@@ -676,7 +676,8 @@ function VideoLectures() {
               </p>
             </div>
           ) : filtered.map((video) => video && (
-            <Card key={video.id} className="overflow-hidden group hover:shadow-xl transition-all">
+        {console.log("video link:", video.googleDriveLink)}
+      <Card key={video.id} className="overflow-hidden group hover:shadow-xl transition-all">
      <div className="aspect-video bg-slate-100 relative flex items-center justify-center overflow-hidden">
   {(() => {
     const driveMatch = video.googleDriveLink?.match(/\/d\/([a-zA-Z0-9_-]+)/);
