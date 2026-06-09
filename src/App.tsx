@@ -61,6 +61,7 @@ interface UserProfile {
   email: string;
   role: Role;
    targetExam: "CAT" | "GMAT" | "CUET" | "ALL";
+  registrationDate?: string;
 }
 
 interface Question {
