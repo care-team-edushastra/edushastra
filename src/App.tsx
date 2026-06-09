@@ -677,20 +677,26 @@ function VideoLectures() {
             </div>
           ) : filtered.map((video) => video && (
       <Card key={video.id} className="overflow-hidden group hover:shadow-xl transition-all">
-     <div className="aspect-video bg-slate-100 relative flex items-center justify-center overflow-hidden">
+    <div className="aspect-video bg-slate-100 relative flex items-center justify-center overflow-hidden">
   {(() => {
-    const driveMatch = video.googleDriveLink?.match(/\/d\/([a-zA-Z0-9_-]+)/);
-    const idMatch = video.googleDriveLink?.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-    const fileId = driveMatch?.[1] || idMatch?.[1];
-    return fileId ? (
+    const url = video.googleDriveLink;
+    const ytMatch = url?.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    const driveMatch = url?.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    const driveIdMatch = url?.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    const fileId = driveMatch?.[1] || driveIdMatch?.[1];
+    const thumbnail = ytMatch
+      ? `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`
+      : fileId
+      ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w640`
+      : null;
+    return thumbnail ? (
       <img
-        src={`https://drive.google.com/thumbnail?id=${fileId}&sz=w640`}
+        src={thumbnail}
         alt={video.topicName}
         className="absolute inset-0 w-full h-full object-cover"
+        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
       />
-    ) : (
-      <div className="absolute inset-0 bg-slate-200" />
-    );
+    ) : null;
   })()}
   <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-all" />
   <PlayCircle className="relative z-10 text-white/80 group-hover:text-white group-hover:scale-110 transition-all drop-shadow-lg" size={64} />
