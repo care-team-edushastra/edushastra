@@ -66,6 +66,11 @@ const SHEET_CONFIG: Record<string, string[]> = {
  * Utility to fetch data from a Google Sheet
  * Robust version: uses row 1 as headers to map data correctly regardless of column order
  */
+function normalizeKey(str: string): string {
+  if (!str) return "";
+  return str.toLowerCase().replace(/[\s_\-]/g, "");
+}
+
 async function fetchSheetData(range: string) {
   if (!SPREADSHEET_ID || !GOOGLE_EMAIL || !GOOGLE_KEY) {
     console.log(`Skipping Sheet read for [${range}]: Google Sheets not configured.`);
@@ -85,16 +90,16 @@ async function fetchSheetData(range: string) {
       return [];
     }
 
-    const headers = allRows[0].map((h: string) => h.toLowerCase().trim());
+   const headers = allRows[0].map((h: string) => normalizeKey(h));
     const dataRows = allRows.slice(1);
     const expectedKeys = SHEET_CONFIG[range];
 
-    console.log(`✅ Mapping ${dataRows.length} rows from ${range} using headers: [${headers.join(", ")}]`);
+    console.log(`✅ Mapping ${dataRows.length} rows from ${range} using normalized headers: [${headers.join(", ")}]`);
 
     return dataRows.map(row => {
       const obj: any = {};
       expectedKeys.forEach(key => {
-        const index = headers.indexOf(key.toLowerCase());
+     const index = headers.indexOf(normalizeKey(key));
         if (index !== -1) {
           let val = row[index] || "";
           // Auto-parse JSON strings for complex fields
@@ -136,7 +141,8 @@ async function appendSheetData(range: string, data: any) {
       range: `${range}!A1:Z1`,
     });
 
-    const headers = (headerRes.data.values?.[0] || []).map((h: string) => h.toLowerCase().trim());
+   const headersRaw = headerRes.data.values?.[0] || [];
+    const headers = headersRaw.map((h: string) => normalizeKey(h));
     
     if (headers.length === 0) {
       console.warn(`⚠️ Sheet [${range}] appears to have no headers. Appending in default order.`);
@@ -157,9 +163,10 @@ async function appendSheetData(range: string, data: any) {
 
     // 2. Map data to the correct column indices
     const expectedKeys = SHEET_CONFIG[range];
-    const row = headers.map(header => {
+   const row = headersRaw.map((headerRaw: string) => {
+      const headerNormalized = normalizeKey(headerRaw);
       // Find the key that matches this header
-      const key = expectedKeys.find(k => k.toLowerCase() === header);
+      const key = expectedKeys.find(k => normalizeKey(k) === headerNormalized);
       if (!key) return "";
       let val = data[key];
       if (typeof val === "object") val = JSON.stringify(val);
@@ -626,7 +633,19 @@ try {
 
  app.get("/api/daily-tests", authenticateToken, async (req: any, res) => {
     let dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
-    
+     console.log(`[DEBUG] /api/daily-tests called by:`, req.user);
+      if (req.user.role === 'student') {
+      const regDate = await getStudentRegistrationDate(req.user);
+      console.log(`[DEBUG] Student registrationDate retrieved:`, regDate);
+      console.log(`[DEBUG] Before filtering, dailyTests count:`, dailyTests.length, dailyTests.map((t: any) => ({ id: t.id, testDate: t.testDate, targetExam: t.targetExam })));
+      dailyTests = dailyTests.filter((t: any) => {
+        const matchesExam = t.targetExam === req.user.targetExam;
+        const afterEnroll = isAfterEnrollment(t.testDate, regDate);
+        console.log(`[DEBUG] Test ${t.id} - testDate: ${t.testDate}, targetExam: ${t.targetExam}. matchesExam: ${matchesExam}, afterEnroll: ${afterEnroll}`);
+        return matchesExam && afterEnroll;
+      });
+      console.log(`[DEBUG] After filtering, dailyTests count:`, dailyTests.length);
+    }
     // Return all tests sorted by date (latest first)
     const sortedTests = [...dailyTests].sort((a, b) => b.testDate.localeCompare(a.testDate));
     res.json(sortedTests);
