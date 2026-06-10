@@ -634,7 +634,7 @@ try {
  app.get("/api/daily-tests", authenticateToken, async (req: any, res) => {
     let dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
      console.log(`[DEBUG] /api/daily-tests called by:`, req.user);
-      if (req.user.role === 'student') {
+      {
       const regDate = await getStudentRegistrationDate(req.user);
       console.log(`[DEBUG] Student registrationDate retrieved:`, regDate);
       console.log(`[DEBUG] Before filtering, dailyTests count:`, dailyTests.length, dailyTests.map((t: any) => ({ id: t.id, testDate: t.testDate, targetExam: t.targetExam })));
