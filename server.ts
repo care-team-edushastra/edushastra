@@ -632,20 +632,22 @@ try {
   });
 
  app.get("/api/daily-tests", authenticateToken, async (req: any, res) => {
-    let dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
-     console.log(`[DEBUG] /api/daily-tests called by:`, req.user);
-      {
-      const regDate = await getStudentRegistrationDate(req.user);
-      console.log(`[DEBUG] Student registrationDate retrieved:`, regDate);
-      console.log(`[DEBUG] Before filtering, dailyTests count:`, dailyTests.length, dailyTests.map((t: any) => ({ id: t.id, testDate: t.testDate, targetExam: t.targetExam })));
-      dailyTests = dailyTests.filter((t: any) => {
-        const matchesExam = t.targetExam === req.user.targetExam;
-        const afterEnroll = isAfterEnrollment(t.testDate, regDate);
-        console.log(`[DEBUG] Test ${t.id} - testDate: ${t.testDate}, targetExam: ${t.targetExam}. matchesExam: ${matchesExam}, afterEnroll: ${afterEnroll}`);
-        return matchesExam && afterEnroll;
-      });
-      console.log(`[DEBUG] After filtering, dailyTests count:`, dailyTests.length);
-    }
+   let dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
+console.log(`[DEBUG] /api/daily-tests called by:`, req.user);
+
+if (req.user.role === 'student') {
+  const regDate = await getStudentRegistrationDate(req.user);
+  console.log(`[DEBUG] Student registrationDate retrieved:`, regDate);
+  console.log(`[DEBUG] Before filtering, dailyTests count:`, dailyTests.length, dailyTests.map((t: any) => ({ id: t.id, testDate: t.testDate, targetExam: t.targetExam })));
+  
+  dailyTests = dailyTests.filter((t: any) => {
+    const afterEnroll = isAfterEnrollment(t.testDate, regDate);
+    console.log(`[DEBUG] Test ${t.id} - testDate: ${t.testDate}, targetExam: ${t.targetExam}. afterEnroll: ${afterEnroll}`);
+    return afterEnroll;
+  });
+  
+  console.log(`[DEBUG] After filtering, dailyTests count:`, dailyTests.length);
+}
     // Return all tests sorted by date (latest first)
     const sortedTests = [...dailyTests].sort((a, b) => b.testDate.localeCompare(a.testDate));
     res.json(sortedTests);
