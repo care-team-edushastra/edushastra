@@ -271,19 +271,60 @@ function getLocalDB(): DB {
 function saveLocalDB(db: DB) {
   fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 }
+
+function parseDateRobustly(dateStr: any): Date | null {
+  if (!dateStr) return null;
+  if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
+  
+  const str = String(dateStr).trim();
+  if (!str) return null;
+
+  // Try to parse standard numbers (timestamp)
+  if (/^\d+$/.test(str)) {
+    const num = parseInt(str, 10);
+    const d = new Date(num);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Check for DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+  // E.g. "10/06/2026", "25-04-2026", "10.06.2026"
+  const dmyMatch = str.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10);
+    const month = parseInt(dmyMatch[2], 10) - 1; // 0-indexed in JS Date
+    const year = parseInt(dmyMatch[3], 10);
+    const d = new Date(year, month, day);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Check for YYYY/MM/DD or YYYY-MM-DD
+  const ymdMatch = str.match(/^(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})$/);
+  if (ymdMatch) {
+    const year = parseInt(ymdMatch[1], 10);
+    const month = parseInt(ymdMatch[2], 10) - 1;
+    const day = parseInt(ymdMatch[3], 10);
+    const d = new Date(year, month, day);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Fallback to standard JavaScript new Date() parsing
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) return d;
+
+  return null;
+}
 function isAfterEnrollment(contentDateStr: string | undefined, enrollmentDateStr: string | undefined): boolean {
   if (!enrollmentDateStr) return true;
   if (!contentDateStr) return true;
   try {
-    const contentDate = new Date(contentDateStr);
-    const enrollmentDate = new Date(enrollmentDateStr);
-    if (isNaN(contentDate.getTime()) || isNaN(enrollmentDate.getTime())) {
+     const contentDate = parseDateRobustly(contentDateStr);
+    const enrollmentDate = parseDateRobustly(enrollmentDateStr);
+    if (!contentDate || !enrollmentDate) {
       return true;
     }
-    // Set both to midnight UTC of that day to compare calendar date
-    const cMidnight = Date.UTC(contentDate.getUTCFullYear(), contentDate.getUTCMonth(), contentDate.getUTCDate());
-    const eMidnight = Date.UTC(enrollmentDate.getUTCFullYear(), enrollmentDate.getUTCMonth(), enrollmentDate.getUTCDate());
-    return cMidnight >= eMidnight;
+      contentDate.setHours(0, 0, 0, 0);
+    enrollmentDate.setHours(0, 0, 0, 0);
+    return contentDate.getTime() >= enrollmentDate.getTime();
   } catch (err) {
     return true;
   }
