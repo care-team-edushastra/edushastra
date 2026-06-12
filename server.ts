@@ -320,6 +320,22 @@ function parseDateRobustly(dateStr: any): Date | null {
 
   return null;
 }
+function parseTargetExams(targetExam: any): string[] {
+  if (!targetExam) return [];
+  if (Array.isArray(targetExam)) {
+    return targetExam.map((e: string) => String(e).trim()).filter(Boolean);
+  }
+  return String(targetExam)
+    .split(",")
+    .map((e: string) => e.trim())
+    .filter(Boolean);
+}
+
+function contentMatchesExam(contentTargetExam: any, studentExam: string): boolean {
+  const exams = parseTargetExams(contentTargetExam);
+  if (exams.length === 0) return false;
+  return exams.includes("ALL") || exams.includes(studentExam);
+}
 function isAfterEnrollment(contentDateStr: string | undefined, enrollmentDateStr: string | undefined): boolean {
   if (!enrollmentDateStr) return true;
   if (!contentDateStr) return true;
@@ -486,7 +502,7 @@ try {
     const materials = await fetchSheetData("CourseMaterials") || getLocalDB().courseMaterials;
     if (req.user.role === 'student') {
       const regDate = await getStudentRegistrationDate(req.user);
-      return res.json(materials.filter((m: any) => m.targetExam === req.user.targetExam && isAfterEnrollment(m.dateAdded, regDate)));
+      return res.json(materials.filter((m: any) => contentMatchesExam(m.targetExam, req.user.targetExam) && isAfterEnrollment(m.dateAdded, regDate)));
     }
     res.json(materials);
   });
@@ -495,7 +511,7 @@ try {
     const videos = await fetchSheetData("VideoLectures") || getLocalDB().videoLectures;
     if (req.user.role === 'student') {
  const regDate = await getStudentRegistrationDate(req.user);
-      return res.json(videos.filter((v: any) => v.targetExam === req.user.targetExam && isAfterEnrollment(v.dateUploaded, regDate)));
+      return res.json(videos.filter((v: any) => contentMatchesExam(v.targetExam, req.user.targetExam) && isAfterEnrollment(v.dateUploaded, regDate)));
     }
     res.json(videos);
   });
