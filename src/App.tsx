@@ -464,7 +464,7 @@ function Dashboard({ user, setActiveTab }: { user: UserProfile, setActiveTab: (t
               { label: "Videos", icon: Video, tab: "videos", color: "bg-purple-500" },
               { label: "Analytics", icon: BarChart3, tab: "analytics", color: "bg-green-500" },
               { label: "History", icon: History, tab: "history", color: "bg-slate-500" },
-              { label: "Doubt Solving", icon: HelpCircle, link: "https://gemini.google.com/gem/92e787565663", color: "bg-pink-500" },
+              { label: "Doubt Solving", icon: HelpCircle, link: "https://www.edushastra.com/doubt-solving/", color: "bg-pink-500" },
             ].map((item: any) => {
               const Icon = item.icon;
               const content = (
