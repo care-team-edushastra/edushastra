@@ -582,8 +582,11 @@ try {
       return res.status(400).json({ message: "Invalid test data (exam category required)" });
     }
 
+    // targetExam may now be an array (multi-batch) from the frontend, or a string
+    const targetExamStr = Array.isArray(targetExam) ? targetExam.join(",") : targetExam;
+
     const testId = `DT${Date.now()}`;
- const newTest = { id: testId, testDate, questionIds, targetExam, name: name || `Practice Test ${testDate}` };
+ const newTest = { id: testId, testDate, questionIds, targetExam: targetExamStr, name: name || `Practice Test ${testDate}` };
     
     await appendSheetData("DailyTests", newTest);
     
@@ -647,22 +650,15 @@ try {
     res.json({ success: true });
   });
 
- app.get("/api/daily-tests", authenticateToken, async (req: any, res) => {
+app.get("/api/daily-tests", authenticateToken, async (req: any, res) => {
    let dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
-console.log(`[DEBUG] /api/daily-tests called by:`, req.user);
 
 if (req.user.role === 'student') {
   const regDate = await getStudentRegistrationDate(req.user);
-  console.log(`[DEBUG] Student registrationDate retrieved:`, regDate);
-  console.log(`[DEBUG] Before filtering, dailyTests count:`, dailyTests.length, dailyTests.map((t: any) => ({ id: t.id, testDate: t.testDate, targetExam: t.targetExam })));
-  
-  dailyTests = dailyTests.filter((t: any) => {
-    const afterEnroll = isAfterEnrollment(t.testDate, regDate);
-    console.log(`[DEBUG] Test ${t.id} - testDate: ${t.testDate}, targetExam: ${t.targetExam}. afterEnroll: ${afterEnroll}`);
-    return afterEnroll;
-  });
-  
-  console.log(`[DEBUG] After filtering, dailyTests count:`, dailyTests.length);
+
+  dailyTests = dailyTests.filter((t: any) =>
+    contentMatchesExam(t.targetExam, req.user.targetExam) && isAfterEnrollment(t.testDate, regDate)
+  );
 }
     // Return all tests sorted by date (latest first)
     const sortedTests = [...dailyTests].sort((a, b) => b.testDate.localeCompare(a.testDate));
@@ -677,7 +673,7 @@ if (req.user.role === 'student') {
     if (test) {
         if (req.user.role === 'student') {
         const regDate = await getStudentRegistrationDate(req.user);
-        if (!isAfterEnrollment(test.testDate, regDate) || test.targetExam !== req.user.targetExam) {
+         if (!isAfterEnrollment(test.testDate, regDate) || !contentMatchesExam(test.targetExam, req.user.targetExam)) {
           return res.status(403).json({ message: "You are not authorized to access this test." });
         }
       }
@@ -694,13 +690,23 @@ if (req.user.role === 'student') {
     const dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
     const test = dailyTests.find(t => t.testDate === today);
     
+     app.get("/api/daily-test", authenticateToken, async (req: any, res) => {
+    const today = new Date().toISOString().split('T')[0];
+    const dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
+
+    let test;
+    if (req.user.role === 'student') {
+      const regDate = await getStudentRegistrationDate(req.user);
+      test = dailyTests.find(t =>
+        t.testDate === today &&
+        contentMatchesExam(t.targetExam, req.user.targetExam) &&
+        isAfterEnrollment(t.testDate, regDate)
+      );
+    } else {
+      test = dailyTests.find(t => t.testDate === today);
+    }
+
     if (test) {
-      if (req.user.role === 'student') {
-        const regDate = await getStudentRegistrationDate(req.user);
-        if (!isAfterEnrollment(test.testDate, regDate) || test.targetExam !== req.user.targetExam) {
-          return res.status(403).json({ message: "No test available for today." });
-        }
-      }
       const approved = await fetchSheetData("ApprovedQuestions") || getLocalDB().approvedQuestions;
       const questions = approved.filter(q => test.questionIds.includes(q.id));
       res.json({ ...test, questions });
