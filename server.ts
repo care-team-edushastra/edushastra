@@ -685,12 +685,7 @@ if (req.user.role === 'student') {
     }
   });
 
- app.get("/api/daily-test", authenticateToken, async (req: any, res) => {
-    const today = new Date().toISOString().split('T')[0];
-    const dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
-    const test = dailyTests.find(t => t.testDate === today);
-    
-     app.get("/api/daily-test", authenticateToken, async (req: any, res) => {
+app.get("/api/daily-test", authenticateToken, async (req: any, res) => {
     const today = new Date().toISOString().split('T')[0];
     const dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
 
@@ -714,7 +709,6 @@ if (req.user.role === 'student') {
       res.status(404).json({ message: "No test available for today." });
     }
   });
-
   app.post("/api/test-results", authenticateToken, async (req: any, res) => {
     const { testId } = req.body;
 
