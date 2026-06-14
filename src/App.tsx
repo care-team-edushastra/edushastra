@@ -1384,7 +1384,13 @@ function AdminDashboard({ user }: { user: UserProfile }) {
   const [newVideo, setNewVideo] = useState({ 
     topicName: "", section: "Quantitative", googleSheetLink: "", googleDriveLink: "", duration: "", instructorName: "", targetExam: "CAT" as any
   });
-  const [examType, setExamType] = useState<"CAT" | "GMAT" | "CUET">("CAT");
+ const [selectedExams, setSelectedExams] = useState<string[]>(["CAT"]);
+
+  const toggleExam = (exam: string) => {
+    setSelectedExams(prev =>
+      prev.includes(exam) ? prev.filter(e => e !== exam) : [...prev, exam]
+    );
+  };
   const [testName, setTestName] = useState("");
 
 
@@ -1496,10 +1502,15 @@ function AdminDashboard({ user }: { user: UserProfile }) {
   }
 };
 
-  const handlePublishTest = async () => {
-    const categoryApproved = approved.filter(q => q.targetExam === examType);
+const handlePublishTest = async () => {
+    if (selectedExams.length === 0) {
+      toast.error("Select at least one exam category");
+      return;
+    }
+
+    const categoryApproved = approved.filter(q => selectedExams.includes(q.targetExam));
     if (categoryApproved.length < 20) {
-      toast.error(`Need at least 20 approved questions for ${examType}. You have ${categoryApproved.length}.`);
+      toast.error(`Need at least 20 approved questions for ${selectedExams.join(", ")}. You have ${categoryApproved.length}.`);
       return;
     }
 
@@ -1513,12 +1524,12 @@ function AdminDashboard({ user }: { user: UserProfile }) {
         body: JSON.stringify({
           testDate: today,
           questionIds: selectedIds,
-          targetExam: examType,
+          targetExam: selectedExams.join(","),
           name: testName     
         })
       });
       
-      toast.success(`${examType} test published for today!`);
+      toast.success(`Test published for ${selectedExams.join(", ")}!`);
       setTestName(""); 
     } catch (err: any) {
       toast.error("Publication failed: " + err.message);
@@ -1767,27 +1778,36 @@ function AdminDashboard({ user }: { user: UserProfile }) {
     />
   </div>
 
-  <div className="flex justify-center gap-4">
-    <Select value={examType} onValueChange={(v: any) => setExamType(v)}>
-      <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-      <SelectContent>
-        <SelectItem value="CAT">CAT</SelectItem>
-        <SelectItem value="GMAT">GMAT</SelectItem>
-        <SelectItem value="CUET">CUET</SelectItem>
-      </SelectContent>
-    </Select>
+   <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-wrap justify-center gap-3">
+      {["CAT", "GMAT", "CUET"].map(exam => (
+        <label
+          key={exam}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm font-medium ${
+            selectedExams.includes(exam) ? "bg-primary/10 border-primary" : "border-border"
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={selectedExams.includes(exam)}
+            onChange={() => toggleExam(exam)}
+          />
+          {exam}
+        </label>
+      ))}
+    </div>
     <Button size="lg" onClick={handlePublishTest} disabled={publishing}>
-      {publishing ? "Publishing..." : `Publish Today's ${examType} Test`}
+      {publishing ? "Publishing..." : `Publish Today's Test (${selectedExams.join(", ") || "Select category"})`}
     </Button>
   </div>
 
   <div className="p-6 bg-secondary/20 rounded-2xl border border-dashed text-center">
     <p className="text-sm text-muted-foreground">
-      Note: Publishing picks the 20 most recent approved questions for the selected category that haven't been recently used in a test.
+      Note: Publishing picks the 20 most recent approved questions for the selected categories that haven't been recently used in a test.
     </p>
     <div className="mt-4 flex justify-center gap-4">
       <div className="text-center">
-        <div className="text-2xl font-bold">{approved.filter(q => q.targetExam === examType).length}</div>
+        <div className="text-2xl font-bold">{approved.filter(q => selectedExams.includes(q.targetExam)).length}</div>
         <div className="text-[10px] uppercase font-bold text-muted-foreground">Available</div>
       </div>
       <div className="w-px h-8 bg-border" />
