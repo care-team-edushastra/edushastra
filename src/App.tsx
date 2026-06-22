@@ -1377,6 +1377,7 @@ function AdminDashboard({ user }: { user: UserProfile }) {
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [activeTab, setActiveTab] = useState("students");
+  const [examType, setExamType] = useState<"CAT" | "GMAT" | "CUET">("CAT");
   
   const [newMaterial, setNewMaterial] = useState({ 
     topicName: "", section: "Quantitative", googleSheetLink: "", googleDriveLink: "", description: "", targetExam: "CAT" as any
