@@ -340,7 +340,7 @@ function LoginPage({ onLogin }: { onLogin: (u: UserProfile) => void }) {
             </div>
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight">EduShastra</CardTitle>
-          <CardDescription>Enter your credentials to access the LMS</CardDescription>
+          <CardDescription>Enter your credentials to access the Portal</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
