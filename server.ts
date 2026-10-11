@@ -1346,12 +1346,18 @@ app.get("/api/sectional-questions", authenticateToken, async (req: any, res) => 
   res.json(questions);
 });
   app.get("/api/performance", authenticateToken, async (req: any, res) => {
-    const results = await fetchSheetData("TestResults") || getLocalDB().testResults;
-    res.json(results.filter(r => r.studentId === req.user.id));
-    
     try {
-      const dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
-      const enriched = userResults.map(r => {
+      const results = await fetchSheetData("TestResults") || getLocalDB().testResults;
+      const userResults = results.filter((r: any) => r.studentId === req.user.id);
+
+      let dailyTests: any[] = [];
+      try {
+        dailyTests = await fetchSheetData("DailyTests") || getLocalDB().dailyTests;
+      } catch (e) {
+        dailyTests = [];
+      }
+
+      const enriched = userResults.map((r: any) => {
         const test = dailyTests.find((t: any) => t.id === r.testId);
         return {
           ...r,
@@ -1361,8 +1367,9 @@ app.get("/api/sectional-questions", authenticateToken, async (req: any, res) => 
         };
       });
       res.json(enriched);
-    } catch (err) {
-      res.json(userResults.map(r => ({ ...r, testName: "Practice Test", name: "Practice Test" })));
+    } catch (err: any) {
+      console.error("Error in /api/performance:", err?.message || err);
+      res.status(500).json({ message: "Failed to load performance" });
     }
   });
 
