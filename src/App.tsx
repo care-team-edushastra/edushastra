@@ -1,4 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
+ import SectionalTest from "./sectional-test";
+import MockTest from "./mock-test";
+import PYQTest from "./pyq-test";
+import DailyPractice from "./daily-practice";
+import "katex/dist/katex.min.css";
+import Latex from "react-latex-next";
 import { 
   BookOpen, 
   Video, 
@@ -23,7 +29,7 @@ import {
   BrainCircuit,
   History,
   Presentation,
-  HelpCircle
+ ‎ Archive
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
@@ -77,13 +83,17 @@ interface Question {
 
 // --- Components ---
 
-const SidebarItem = ({ icon: Icon, label, active, onClick }: { icon: any, label: string, active: boolean, onClick: () => void }) => (
+const SidebarItem = ({ icon: Icon, label, active, onClick, highlight }: { icon: any, label: string, active: boolean, onClick: () => void, highlight?: boolean }) => (
   <button
     onClick={onClick}
-    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all border ${
       active 
-        ? "bg-primary text-primary-foreground shadow-md" 
-        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+        ? "bg-primary text-primary-foreground shadow-md border-transparent" 
+        : "text-muted-foreground hover:bg-secondary hover:text-foreground border-transparent"
+    } ${
+      highlight && !active ? "border-yellow-400 ring-1 ring-yellow-400/60 shadow-[0_0_8px_rgba(250,204,21,0.4)]" : ""
+    } ${
+      highlight && active ? "ring-2 ring-yellow-400 ring-offset-1" : ""
     }`}
   >
     <Icon size={20} />
@@ -209,12 +219,14 @@ export default function App() {
                 </div>
                 <nav className="flex-1 space-y-2">
                   <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === "dashboard"} onClick={() => { setActiveTab("dashboard"); setIsMobileMenuOpen(false); }} />
+                  <SidebarItem icon={ClipboardList} label="Daily Practice" active={activeTab === "daily-test"} onClick={() => { setActiveTab("daily-test"); setIsMobileMenuOpen(false); }} highlight />
+                  <SidebarItem icon={ClipboardList} label="Sectional Tests" active={activeTab === "sectional"} onClick={() => setActiveTab("sectional")} highlight />
+                  <SidebarItem icon={ClipboardList} label="Mock Tests" active={activeTab === "mock"} onClick={() => setActiveTab("mock")} highlight />
                   <SidebarItem icon={BookOpen} label="Course Materials" active={activeTab === "courses"} onClick={() => { setActiveTab("courses"); setIsMobileMenuOpen(false); }} />
                   <SidebarItem icon={Video} label="Video Lectures" active={activeTab === "videos"} onClick={() => { setActiveTab("videos"); setIsMobileMenuOpen(false); }} />
-                  <SidebarItem icon={ClipboardList} label="Daily Practice" active={activeTab === "daily-test"} onClick={() => { setActiveTab("daily-test"); setIsMobileMenuOpen(false); }} />
                   <SidebarItem icon={History} label="Test History" active={activeTab === "history"} onClick={() => { setActiveTab("history"); setIsMobileMenuOpen(false); }} />
                   <SidebarItem icon={BarChart3} label="Analytics" active={activeTab === "analytics"} onClick={() => { setActiveTab("analytics"); setIsMobileMenuOpen(false); }} />
-                  
+                  <SidebarItem icon={Archive} label="PYQ Papers" active={activeTab === "pyq"} onClick={() => { setActiveTab("pyq"); setIsMobileMenuOpen(false); }} />
                   {user.role === "admin" && (
                     <>
                       <div className="pt-6 pb-2 text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] px-3">Admin Panel</div>
@@ -251,12 +263,15 @@ export default function App() {
           </div>
 
           <nav className="flex-1 space-y-1">
-            <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === "dashboard"} onClick={() => setActiveTab("dashboard")} />
-            <SidebarItem icon={BookOpen} label="Course Materials" active={activeTab === "courses"} onClick={() => setActiveTab("courses")} />
+           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === "dashboard"} onClick={() => setActiveTab("dashboard")} />
+           <SidebarItem icon={ClipboardList} label="Daily Practice" active={activeTab === "daily-test"} onClick={() => setActiveTab("daily-test")} highlight />
+           <SidebarItem icon={ClipboardList} label="Sectional Tests" active={activeTab === "sectional"} onClick={() => setActiveTab("sectional")} highlight />
+           <SidebarItem icon={ClipboardList} label="Mock Tests" active={activeTab === "mock"} onClick={() => setActiveTab("mock")} highlight />
+           <SidebarItem icon={BookOpen} label="Course Materials" active={activeTab === "courses"} onClick={() => setActiveTab("courses")} />
             <SidebarItem icon={Video} label="Video Lectures" active={activeTab === "videos"} onClick={() => setActiveTab("videos")} />
-            <SidebarItem icon={ClipboardList} label="Daily Practice" active={activeTab === "daily-test"} onClick={() => setActiveTab("daily-test")} />
             <SidebarItem icon={History} label="Test History" active={activeTab === "history"} onClick={() => setActiveTab("history")} />
             <SidebarItem icon={BarChart3} label="Analytics" active={activeTab === "analytics"} onClick={() => setActiveTab("analytics")} />
+           <SidebarItem icon={Archive} label="PYQ Papers" active={activeTab === "pyq"} onClick={() => setActiveTab("pyq")} /> 
             
             {user.role === "admin" && (
               <>
@@ -294,9 +309,12 @@ export default function App() {
             {activeTab === "dashboard" && <Dashboard user={user} setActiveTab={setActiveTab} />}
             {activeTab === "courses" && <CourseMaterials />}
             {activeTab === "videos" && <VideoLectures />}
-            {activeTab === "daily-test" && <DailyTest user={user} />}
+           {activeTab === "daily-test" && <DailyPractice user={user} />}
             {activeTab === "history" && <TestHistory user={user} />}
             {activeTab === "analytics" && <Analytics user={user} />}
+              {activeTab === "sectional" && <SectionalTest user={user} />}
+              {activeTab === "mock" && <MockTest user={user} />}
+           {activeTab === "pyq" && <PYQTest user={user} />}
             {activeTab === "admin" && <AdminDashboard user={user} />}
           </motion.div>
         </AnimatePresence>
