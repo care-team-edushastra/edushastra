@@ -29,7 +29,7 @@ import {
   BrainCircuit,
   History,
   Presentation,
- ‎ Archive
+ ‎ HelpCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
@@ -226,7 +226,7 @@ export default function App() {
                   <SidebarItem icon={Video} label="Video Lectures" active={activeTab === "videos"} onClick={() => { setActiveTab("videos"); setIsMobileMenuOpen(false); }} />
                   <SidebarItem icon={History} label="Test History" active={activeTab === "history"} onClick={() => { setActiveTab("history"); setIsMobileMenuOpen(false); }} />
                   <SidebarItem icon={BarChart3} label="Analytics" active={activeTab === "analytics"} onClick={() => { setActiveTab("analytics"); setIsMobileMenuOpen(false); }} />
-                  <SidebarItem icon={Archive} label="PYQ Papers" active={activeTab === "pyq"} onClick={() => { setActiveTab("pyq"); setIsMobileMenuOpen(false); }} />
+                  <SidebarItem icon={ClipboardList} label="PYQ Papers" active={activeTab === "pyq"} onClick={() => { setActiveTab("pyq"); setIsMobileMenuOpen(false); }} />
                   {user.role === "admin" && (
                     <>
                       <div className="pt-6 pb-2 text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] px-3">Admin Panel</div>
@@ -271,7 +271,7 @@ export default function App() {
             <SidebarItem icon={Video} label="Video Lectures" active={activeTab === "videos"} onClick={() => setActiveTab("videos")} />
             <SidebarItem icon={History} label="Test History" active={activeTab === "history"} onClick={() => setActiveTab("history")} />
             <SidebarItem icon={BarChart3} label="Analytics" active={activeTab === "analytics"} onClick={() => setActiveTab("analytics")} />
-           <SidebarItem icon={Archive} label="PYQ Papers" active={activeTab === "pyq"} onClick={() => setActiveTab("pyq")} /> 
+           <SidebarItem icon={ClipboardList} label="PYQ Papers" active={activeTab === "pyq"} onClick={() => setActiveTab("pyq")} /> 
             
             {user.role === "admin" && (
               <>
