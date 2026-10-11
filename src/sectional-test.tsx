@@ -23,9 +23,11 @@ import { apiRequest } from "@/src/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type SectionKey = "VARC" | "DILR" | "Quantitative";
+
 interface SectionalQuestion {
   id: string;
-  section: "VARC" | "DILR" | "Quantitative";
+  section: SectionKey;
   questionText: string;
   options: string[];
   correctAnswer: string;
@@ -43,7 +45,7 @@ interface Passage {
 interface SectionalTest {
   id: string;
   name: string;
-  section: "VARC" | "DILR" | "Quantitative";
+  section: SectionKey;
   durationMinutes: number;
   questions: SectionalQuestion[];
   passages?: Passage[];
@@ -96,7 +98,7 @@ const SECTION_META = {
   },
 };
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatTime(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -109,6 +111,77 @@ function calcScaledScore(correct: number, wrong: number, total: number) {
   const raw = correct * 3 - wrong;
   const maxRaw = total * 3;
   return Math.max(0, Math.round((raw / maxRaw) * 100));
+}
+
+// Google Sheets returns everything as text, so tidy the data before using it.
+
+function normalizeSection(s: any): SectionKey {
+  const v = String(s || "").toLowerCase();
+  if (v.includes("varc") || v.includes("verbal")) return "VARC";
+  if (v.includes("dilr") || v.includes("lrdi") || v.includes("data")) return "DILR";
+  return "Quantitative";
+}
+
+function toArray(v: any): string[] {
+  if (Array.isArray(v)) return v.map((x) => String(x));
+  if (typeof v === "string" && v.trim()) {
+    try {
+      const parsed = JSON.parse(v);
+      if (Array.isArray(parsed)) return parsed.map((x) => String(x));
+    } catch {
+      /* not JSON, fall through */
+    }
+    return v
+      .split(/\r?\n|\|/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function normalizeQuestion(q: any): SectionalQuestion {
+  return {
+    ...q,
+    section: normalizeSection(q.section),
+    questionText: q.questionText || "",
+    options: toArray(q.options),
+    correctAnswer: q.correctAnswer || "",
+    explanation: q.explanation || "",
+    difficulty: q.difficulty || "Medium",
+  };
+}
+
+function normalizeTest(t: any): SectionalTest {
+  const section = normalizeSection(t.section);
+  return {
+    ...t,
+    section,
+    durationMinutes: Number(t.durationMinutes) || SECTION_META[section].minutes,
+    questions: Array.isArray(t.questions) ? t.questions.map(normalizeQuestion) : [],
+    passages: Array.isArray(t.passages) ? t.passages : [],
+  };
+}
+
+function normalizeResult(r: any): SectionalResult {
+  let answers = r.studentAnswers;
+  if (typeof answers === "string") {
+    try {
+      answers = JSON.parse(answers);
+    } catch {
+      answers = {};
+    }
+  }
+  return {
+    ...r,
+    totalScore: Number(r.totalScore) || 0,
+    correctAnswers: Number(r.correctAnswers) || 0,
+    wrongAnswers: Number(r.wrongAnswers) || 0,
+    skippedQuestions: Number(r.skippedQuestions) || 0,
+    timeSpent: Number(r.timeSpent) || 0,
+    scaledScore: Number(r.scaledScore) || 0,
+    studentAnswers:
+      answers && typeof answers === "object" && !Array.isArray(answers) ? answers : {},
+  };
 }
 
 // ─── Question Status Dot ──────────────────────────────────────────────────────
@@ -150,6 +223,7 @@ export default function SectionalTest({ user }: { user: any }) {
   const [attempts, setAttempts] = useState<Record<string, SectionalResult>>({});
   const [selectedTest, setSelectedTest] = useState<SectionalTest | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingTestId, setLoadingTestId] = useState<string | null>(null);
 
   // Test state
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -173,10 +247,13 @@ export default function SectionalTest({ user }: { user: any }) {
         apiRequest("/sectional-tests"),
         apiRequest("/sectional-results"),
       ]);
-      setAvailableTests(tests || []);
+      setAvailableTests(
+        (tests || []).map((t: any) => ({ ...t, section: normalizeSection(t.section) }))
+      );
       const map: Record<string, SectionalResult> = {};
-      (prevResults || []).forEach((r: SectionalResult) => {
-        map[r.testId] = r;
+      (prevResults || []).forEach((r: any) => {
+        const nr = normalizeResult(r);
+        map[nr.testId] = nr;
       });
       setAttempts(map);
     } catch (err: any) {
@@ -189,10 +266,6 @@ export default function SectionalTest({ user }: { user: any }) {
   // ── Timer ───────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (view !== "test" || submitted || timeLeft <= 0) return;
-    if (timeLeft === 0) {
-      handleSubmit();
-      return;
-    }
     const t = setInterval(() => setTimeLeft((p) => p - 1), 1000);
     return () => clearInterval(t);
   }, [view, submitted, timeLeft]);
@@ -218,16 +291,29 @@ export default function SectionalTest({ user }: { user: any }) {
   }, [currentIdx, selectedTest, view]);
 
   // ── Actions ──────────────────────────────────────────────────────────────
+
+  // The list only has a light version of each test (no question text or
+  // options), so fetch the full test before starting or reviewing it.
   const startTest = async (test: SectionalTest) => {
-    if (attempts[test.id]) {
-      setSelectedTest(test);
-      setResult(attempts[test.id]);
-      setAnswers(attempts[test.id].studentAnswers);
-      setView("result");
-      return;
+    if (loadingTestId) return;
+    setLoadingTestId(test.id);
+    try {
+      const full = normalizeTest(await apiRequest(`/sectional-test/${test.id}`));
+      setSelectedTest(full);
+      const prev = attempts[test.id];
+      if (prev) {
+        setResult(prev);
+        setAnswers(prev.studentAnswers || {});
+        setReviewMode(false);
+        setView("result");
+      } else {
+        setView("instructions");
+      }
+    } catch (err: any) {
+      toast.error("Couldn't load this test. Please try again.");
+    } finally {
+      setLoadingTestId(null);
     }
-    setSelectedTest(test);
-    setView("instructions");
   };
 
   const beginTest = () => {
@@ -268,7 +354,7 @@ export default function SectionalTest({ user }: { user: any }) {
       else wrong++;
     });
 
-    const total = selectedTest.questions.length;
+    const total = selectedTest.questions.length || 1;
     const scaledScore = calcScaledScore(correct, wrong, total);
     const totalScore = Math.round((correct / total) * 100);
     const timeSpent = selectedTest.durationMinutes * 60 - timeLeft;
@@ -378,6 +464,7 @@ export default function SectionalTest({ user }: { user: any }) {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {tests.map((t) => {
                       const attempted = attempts[t.id];
+                      const isLoadingThis = loadingTestId === t.id;
                       return (
                         <Card
                           key={t.id}
@@ -442,8 +529,13 @@ export default function SectionalTest({ user }: { user: any }) {
                               className="w-full"
                               variant={attempted ? "outline" : "default"}
                               onClick={() => startTest(t)}
+                              disabled={!!loadingTestId}
                             >
-                              {attempted ? "Review Attempt" : "Start Section"}
+                              {isLoadingThis
+                                ? "Loading..."
+                                : attempted
+                                ? "Review Attempt"
+                                : "Start Section"}
                             </Button>
                           </CardContent>
                         </Card>
@@ -478,7 +570,7 @@ export default function SectionalTest({ user }: { user: any }) {
             {/* Stats */}
             <div className="grid grid-cols-3 gap-4 text-center">
               {[
-                ["Questions", selectedTest.questions?.length],
+                ["Questions", selectedTest.questions.length],
                 ["Duration", `${selectedTest.durationMinutes} min`],
                 ["Marking", "+3 / –1"],
               ].map(([label, val]) => (
@@ -488,6 +580,12 @@ export default function SectionalTest({ user }: { user: any }) {
                 </div>
               ))}
             </div>
+
+            {selectedTest.questions.length === 0 && (
+              <div className="p-4 rounded-xl bg-yellow-50 border border-yellow-200 text-sm text-yellow-800">
+                This test has no questions yet. Please contact your admin.
+              </div>
+            )}
 
             {/* Rules */}
             <div className="space-y-3">
@@ -508,7 +606,12 @@ export default function SectionalTest({ user }: { user: any }) {
               ))}
             </div>
 
-            <Button size="lg" className="w-full" onClick={beginTest}>
+            <Button
+              size="lg"
+              className="w-full"
+              onClick={beginTest}
+              disabled={selectedTest.questions.length === 0}
+            >
               Begin Section · {selectedTest.durationMinutes} min
             </Button>
           </CardContent>
@@ -521,8 +624,22 @@ export default function SectionalTest({ user }: { user: any }) {
   if (view === "test" && selectedTest) {
     const questions = selectedTest.questions;
     const currentQ = questions[currentIdx];
-    if (!currentQ) return null;
     const meta = SECTION_META[selectedTest.section];
+
+    // Safety net: never leave the student on a blank screen
+    if (!currentQ) {
+      return (
+        <div className="max-w-md mx-auto py-20 text-center space-y-4">
+          <AlertCircle className="mx-auto text-yellow-500" size={40} />
+          <h3 className="font-bold text-lg">Couldn't load the questions</h3>
+          <p className="text-muted-foreground text-sm">
+            This test has no questions available right now.
+          </p>
+          <Button onClick={() => setView("list")}>Back to Tests</Button>
+        </div>
+      );
+    }
+
     const answeredCount = Object.keys(answers).length;
     const progress = (answeredCount / questions.length) * 100;
 
@@ -575,7 +692,7 @@ export default function SectionalTest({ user }: { user: any }) {
                 </CardHeader>
                 <CardContent>
                   <div className="text-sm leading-relaxed text-muted-foreground max-h-56 overflow-y-auto pr-2 space-y-3">
-                    {activePassage.text.split("\n\n").map((para, i) => (
+                    {(activePassage.text || "").split("\n\n").map((para, i) => (
                       <p key={i}>{para}</p>
                     ))}
                   </div>
@@ -750,7 +867,7 @@ export default function SectionalTest({ user }: { user: any }) {
 
   // ── RESULT VIEW ───────────────────────────────────────────────────────────────
   if (view === "result" && result && selectedTest) {
-    const meta = SECTION_META[selectedTest.section as keyof typeof SECTION_META];
+    const meta = SECTION_META[selectedTest.section];
     const questions = selectedTest.questions;
 
     if (reviewMode) {
@@ -837,7 +954,10 @@ export default function SectionalTest({ user }: { user: any }) {
     // Summary screen
     const rawMarks = result.correctAnswers * 3 - result.wrongAnswers;
     const maxMarks = questions.length * 3;
-    const attemptRate = Math.round(((result.correctAnswers + result.wrongAnswers) / questions.length) * 100);
+    const attempted = result.correctAnswers + result.wrongAnswers;
+    const attemptRate = questions.length
+      ? Math.round((attempted / questions.length) * 100)
+      : 0;
 
     return (
       <div className="max-w-3xl mx-auto space-y-8">
@@ -905,7 +1025,7 @@ export default function SectionalTest({ user }: { user: any }) {
           </div>
           <Progress value={attemptRate} className="h-2" />
           <p className="text-xs text-muted-foreground mt-2">
-            You attempted {result.correctAnswers + result.wrongAnswers} of {questions.length} questions.
+            You attempted {attempted} of {questions.length} questions.
           </p>
         </Card>
 
