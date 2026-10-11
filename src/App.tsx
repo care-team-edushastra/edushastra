@@ -29,7 +29,7 @@ import {
   BrainCircuit,
   History,
   Presentation,
- ‎ HelpCircle
+  HelpCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
