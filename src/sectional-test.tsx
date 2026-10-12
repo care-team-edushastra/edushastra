@@ -18,6 +18,9 @@ import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import Latex from "react-latex-next";
+import "katex/dist/katex.min.css";
 import { toast } from "sonner";
 import { apiRequest } from "@/src/lib/api";
 
@@ -32,6 +35,8 @@ interface SectionalQuestion {
   options: string[];
   correctAnswer: string;
   explanation: string;
+  questionType: "MCQ" | "TITA"; // TITA = type in the answer (no options)
+  answerTolerance: number; // allowed +/- margin for TITA
   difficulty: "Easy" | "Medium" | "Hard";
   passageId?: string; // for RC passages
 }
@@ -56,7 +61,8 @@ interface SectionalResult {
   section: string;
   totalScore: number;
   correctAnswers: number;
-  wrongAnswers: number;
+  wrongAnswers: number; // all wrong answers (MCQ + TITA)
+  wrongTITA: number; // wrong TITA answers (no negative marking)
   skippedQuestions: number;
   timeSpent: number;
   studentAnswers: Record<string, string>;
@@ -140,12 +146,18 @@ function toArray(v: any): string[] {
 }
 
 function normalizeQuestion(q: any): SectionalQuestion {
+  const options = toArray(q.options);
+  // TITA if marked so, or if there are no options to choose from
+  const isTita =
+    String(q.questionType || "").trim().toUpperCase() === "TITA" || options.length === 0;
   return {
     ...q,
     section: normalizeSection(q.section),
     questionText: q.questionText || "",
-    options: toArray(q.options),
-    correctAnswer: q.correctAnswer || "",
+    questionType: isTita ? "TITA" : "MCQ",
+    options: isTita ? [] : options,
+    answerTolerance: Math.abs(Number(q.answerTolerance)) || 0,
+    correctAnswer: String(q.correctAnswer ?? "").trim(),
     explanation: q.explanation || "",
     difficulty: q.difficulty || "Medium",
   };
@@ -176,12 +188,59 @@ function normalizeResult(r: any): SectionalResult {
     totalScore: Number(r.totalScore) || 0,
     correctAnswers: Number(r.correctAnswers) || 0,
     wrongAnswers: Number(r.wrongAnswers) || 0,
+    wrongTITA: Number(r.wrongTITA) || 0,
     skippedQuestions: Number(r.skippedQuestions) || 0,
     timeSpent: Number(r.timeSpent) || 0,
     scaledScore: Number(r.scaledScore) || 0,
     studentAnswers:
       answers && typeof answers === "object" && !Array.isArray(answers) ? answers : {},
   };
+}
+
+// ─── Answer checking & math rendering ─────────────────────────────────────────
+
+// Reads "12", "1,200", "-3.5" or "3/4" as a number (NaN if it isn't one)
+function parseNum(v: any): number {
+  if (typeof v === "number") return v;
+  const str = String(v ?? "").trim().replace(/,/g, "");
+  if (str === "") return NaN;
+  const frac = str.match(/^(-?\d+(?:\.\d+)?)\s*\/\s*(-?\d+(?:\.\d+)?)$/);
+  if (frac) return Number(frac[1]) / Number(frac[2]);
+  return Number(str);
+}
+
+function isCorrectAnswer(q: SectionalQuestion, ans: string | undefined): boolean {
+  if (ans === undefined || String(ans).trim() === "") return false;
+  if (q.questionType === "TITA") {
+    const a = parseNum(ans);
+    const c = parseNum(q.correctAnswer);
+    if (!isNaN(a) && !isNaN(c)) {
+      return Math.abs(a - c) <= (q.answerTolerance || 0) + 1e-9;
+    }
+    return String(ans).trim().toLowerCase() === q.correctAnswer.toLowerCase();
+  }
+  return String(ans).trim() === q.correctAnswer.trim();
+}
+
+// Repairs LaTeX that got mangled on the way through JSON / Google Sheets:
+// "\\frac" (double backslash) and control characters left by "\f", "\t" etc.
+function prepMath(text: string): string {
+  return String(text || "")
+    .replace(/\\\\(?=[A-Za-z])/g, "\\")
+    .replace(/\f/g, "\\f")
+    .replace(/\u0008/g, "\\b")
+    .replace(/\t(?=imes|heta|ext|ilde|au\b|riangle|op\b|o\b)/g, "\\t")
+    .replace(/\r(?=ight|ho\b|angle|ceil)/g, "\\r")
+    .replace(/\n(?=eq\b|abla|ot\b|u\b)/g, "\\n");
+}
+
+// Text with maths: renders $...$, $$...$$, \( \) and \[ \] as equations
+function M({ children }: { children?: string }) {
+  return (
+    <span className="whitespace-pre-line">
+      <Latex>{prepMath(children || "")}</Latex>
+    </span>
+  );
 }
 
 // ─── Question Status Dot ──────────────────────────────────────────────────────
@@ -339,23 +398,40 @@ export default function SectionalTest({ user }: { user: any }) {
     []
   );
 
+  // Typing a TITA answer: keep numbers clean, and treat an empty box as unanswered
+  const setTitaAnswer = (q: SectionalQuestion, raw: string) => {
+    const numeric = !isNaN(parseNum(q.correctAnswer));
+    const val = numeric ? raw.replace(/[^0-9.\-\/]/g, "") : raw;
+    setAnswers((prev) => {
+      const next = { ...prev };
+      if (val.trim() === "") delete next[q.id];
+      else next[q.id] = val;
+      return next;
+    });
+  };
+
   const handleSubmit = useCallback(async () => {
     if (!selectedTest || submitted) return;
     setSubmitted(true);
 
     let correct = 0,
       wrong = 0,
+      wrongTITA = 0,
       skipped = 0;
 
     selectedTest.questions.forEach((q) => {
       const ans = answers[q.id];
-      if (!ans) skipped++;
-      else if (ans === q.correctAnswer) correct++;
-      else wrong++;
+      if (!ans || !String(ans).trim()) skipped++;
+      else if (isCorrectAnswer(q, ans)) correct++;
+      else {
+        wrong++;
+        if (q.questionType === "TITA") wrongTITA++;
+      }
     });
 
     const total = selectedTest.questions.length || 1;
-    const scaledScore = calcScaledScore(correct, wrong, total);
+    // CAT rule: wrong MCQ = -1, wrong TITA = no penalty
+    const scaledScore = calcScaledScore(correct, wrong - wrongTITA, total);
     const totalScore = Math.round((correct / total) * 100);
     const timeSpent = selectedTest.durationMinutes * 60 - timeLeft;
 
@@ -365,6 +441,7 @@ export default function SectionalTest({ user }: { user: any }) {
       totalScore,
       correctAnswers: correct,
       wrongAnswers: wrong,
+      wrongTITA,
       skippedQuestions: skipped,
       timeSpent,
       studentAnswers: answers,
@@ -592,7 +669,8 @@ export default function SectionalTest({ user }: { user: any }) {
               <h3 className="font-bold text-sm uppercase tracking-wide text-muted-foreground">Instructions</h3>
               {[
                 "This is a timed section test. The timer starts when you click Begin.",
-                "Each correct answer earns +3 marks. Each wrong answer deducts –1 mark. Unattempted questions carry 0 marks.",
+                "Each correct answer earns +3 marks. Each wrong MCQ answer deducts –1 mark. Unattempted questions carry 0 marks.",
+                "TITA (type-in-the-answer) questions have no options: type your answer in the box. There is no negative marking for TITA.",
                 "You can navigate between questions freely and flag any question for later review.",
                 "Once time is up, the section auto-submits. You can also submit early.",
                 "Answers cannot be changed after submission.",
@@ -640,7 +718,7 @@ export default function SectionalTest({ user }: { user: any }) {
       );
     }
 
-    const answeredCount = Object.keys(answers).length;
+    const answeredCount = questions.filter((q) => !!(answers[q.id] || "").trim()).length;
     const progress = (answeredCount / questions.length) * 100;
 
     return (
@@ -693,7 +771,7 @@ export default function SectionalTest({ user }: { user: any }) {
                 <CardContent>
                   <div className="text-sm leading-relaxed text-muted-foreground max-h-56 overflow-y-auto pr-2 space-y-3">
                     {(activePassage.text || "").split("\n\n").map((para, i) => (
-                      <p key={i}>{para}</p>
+                      <p key={i}><M>{para}</M></p>
                     ))}
                   </div>
                 </CardContent>
@@ -711,6 +789,9 @@ export default function SectionalTest({ user }: { user: any }) {
                     <Badge variant="outline" className="text-[10px]">
                       {currentQ.difficulty}
                     </Badge>
+                    <Badge variant="outline" className="text-[10px]">
+                      {currentQ.questionType === "TITA" ? "TITA · type answer" : "MCQ"}
+                    </Badge>
                   </div>
                   <button
                     onClick={() => toggleFlag(currentQ.id)}
@@ -724,40 +805,58 @@ export default function SectionalTest({ user }: { user: any }) {
                     <Flag size={16} />
                   </button>
                 </div>
-                <p className="text-base font-semibold leading-relaxed mt-3">
-                  {currentQ.questionText}
-                </p>
+                <div className="text-base font-semibold leading-relaxed mt-3">
+                  <M>{currentQ.questionText}</M>
+                </div>
               </CardHeader>
               <CardContent className="space-y-2">
-                <RadioGroup
-                  value={answers[currentQ.id] || ""}
-                  onValueChange={(val) =>
-                    setAnswers((prev) => ({ ...prev, [currentQ.id]: val }))
-                  }
-                >
-                  {currentQ.options.map((opt, idx) => (
-                    <Label
-                      key={opt}
-                      className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
-                        answers[currentQ.id] === opt
-                          ? `border-primary bg-blue-50 ring-1 ring-primary`
-                          : "border-border hover:border-primary/30 hover:bg-secondary/30"
-                      }`}
-                    >
-                      <RadioGroupItem value={opt} id={`opt-${idx}`} className="sr-only" />
-                      <div
-                        className={`w-7 h-7 shrink-0 rounded-lg flex items-center justify-center font-bold text-xs border ${
+                {currentQ.questionType === "TITA" ? (
+                  <div className="space-y-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                      Type your answer · No negative marking
+                    </p>
+                    <Input
+                      inputMode="decimal"
+                      autoComplete="off"
+                      placeholder="Enter your answer"
+                      value={answers[currentQ.id] || ""}
+                      onChange={(e) => setTitaAnswer(currentQ, e.target.value)}
+                      className="h-12 max-w-xs text-lg font-mono"
+                    />
+                  </div>
+                ) : (
+                  <RadioGroup
+                    value={answers[currentQ.id] || ""}
+                    onValueChange={(val) =>
+                      setAnswers((prev) => ({ ...prev, [currentQ.id]: val }))
+                    }
+                  >
+                    {currentQ.options.map((opt, idx) => (
+                      <Label
+                        key={idx}
+                        className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
                           answers[currentQ.id] === opt
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-secondary text-muted-foreground border-border"
+                            ? `border-primary bg-blue-50 ring-1 ring-primary`
+                            : "border-border hover:border-primary/30 hover:bg-secondary/30"
                         }`}
                       >
-                        {String.fromCharCode(65 + idx)}
-                      </div>
-                      <span className="text-sm">{opt}</span>
-                    </Label>
-                  ))}
-                </RadioGroup>
+                        <RadioGroupItem value={opt} id={`opt-${idx}`} className="sr-only" />
+                        <div
+                          className={`w-7 h-7 shrink-0 rounded-lg flex items-center justify-center font-bold text-xs border ${
+                            answers[currentQ.id] === opt
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-secondary text-muted-foreground border-border"
+                          }`}
+                        >
+                          {String.fromCharCode(65 + idx)}
+                        </div>
+                        <span className="text-sm">
+                          <M>{opt}</M>
+                        </span>
+                      </Label>
+                    ))}
+                  </RadioGroup>
+                )}
               </CardContent>
             </Card>
 
@@ -815,7 +914,7 @@ export default function SectionalTest({ user }: { user: any }) {
                     <StatusDot
                       key={q.id}
                       idx={idx}
-                      answered={!!answers[q.id]}
+                      answered={!!(answers[q.id] || "").trim()}
                       flagged={flagged.has(q.id)}
                       current={idx === currentIdx}
                       onClick={() => setCurrentIdx(idx)}
@@ -882,8 +981,8 @@ export default function SectionalTest({ user }: { user: any }) {
           <div className="space-y-4">
             {questions.map((q, idx) => {
               const studentAns = result.studentAnswers[q.id];
-              const isCorrect = studentAns === q.correctAnswer;
-              const isSkipped = !studentAns;
+              const isCorrect = isCorrectAnswer(q, studentAns);
+              const isSkipped = !studentAns || !String(studentAns).trim();
               return (
                 <Card
                   key={q.id}
@@ -900,6 +999,7 @@ export default function SectionalTest({ user }: { user: any }) {
                       <div className="flex gap-2">
                         <Badge variant="outline">{q.section}</Badge>
                         <Badge variant="outline" className="text-[10px]">{q.difficulty}</Badge>
+                        <Badge variant="outline" className="text-[10px]">{q.questionType}</Badge>
                       </div>
                       {isCorrect ? (
                         <span className="text-green-600 flex items-center gap-1 text-xs font-bold">
@@ -911,35 +1011,61 @@ export default function SectionalTest({ user }: { user: any }) {
                         </span>
                       ) : (
                         <span className="text-red-600 flex items-center gap-1 text-xs font-bold">
-                          <XCircle size={14} /> Wrong (–1)
+                          <XCircle size={14} /> Wrong ({q.questionType === "TITA" ? "0" : "–1"})
                         </span>
                       )}
                     </div>
-                    <p className="font-semibold text-sm mt-2">
-                      Q{idx + 1}. {q.questionText}
-                    </p>
+                    <div className="font-semibold text-sm mt-2">
+                      Q{idx + 1}. <M>{q.questionText}</M>
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div className="grid gap-1.5">
-                      {q.options.map((opt) => (
+                    {q.questionType === "TITA" ? (
+                      <div className="grid gap-1.5 text-sm">
                         <div
-                          key={opt}
-                          className={`px-3 py-2 rounded-lg text-sm border ${
-                            opt === q.correctAnswer
+                          className={`px-3 py-2 rounded-lg border ${
+                            isSkipped
+                              ? "bg-secondary/20 border-transparent"
+                              : isCorrect
                               ? "bg-green-50 border-green-200 text-green-800 font-medium"
-                              : opt === studentAns
-                              ? "bg-red-50 border-red-200 text-red-800"
-                              : "bg-secondary/20 border-transparent"
+                              : "bg-red-50 border-red-200 text-red-800"
                           }`}
                         >
-                          {opt}
+                          <span className="text-xs font-bold uppercase mr-2">Your answer</span>
+                          {isSkipped ? "—" : studentAns}
                         </div>
-                      ))}
-                    </div>
+                        {!isCorrect && (
+                          <div className="px-3 py-2 rounded-lg border bg-green-50 border-green-200 text-green-800 font-medium">
+                            <span className="text-xs font-bold uppercase mr-2">Correct answer</span>
+                            {q.correctAnswer}
+                            {q.answerTolerance > 0 && (
+                              <span className="text-xs font-normal"> (± {q.answerTolerance})</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="grid gap-1.5">
+                        {q.options.map((opt, oi) => (
+                          <div
+                            key={oi}
+                            className={`px-3 py-2 rounded-lg text-sm border ${
+                              opt === q.correctAnswer
+                                ? "bg-green-50 border-green-200 text-green-800 font-medium"
+                                : opt === studentAns
+                                ? "bg-red-50 border-red-200 text-red-800"
+                                : "bg-secondary/20 border-transparent"
+                            }`}
+                          >
+                            <M>{opt}</M>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {q.explanation && (
                       <div className="bg-secondary/30 p-3 rounded-lg text-sm">
                         <p className="font-bold text-xs uppercase mb-1">Explanation</p>
-                        <p className="text-muted-foreground">{q.explanation}</p>
+                        <div className="text-muted-foreground"><M>{q.explanation}</M></div>
                       </div>
                     )}
                   </CardContent>
@@ -952,7 +1078,9 @@ export default function SectionalTest({ user }: { user: any }) {
     }
 
     // Summary screen
-    const rawMarks = result.correctAnswers * 3 - result.wrongAnswers;
+    // Wrong TITA answers are not penalised
+    const penalised = Math.max(0, result.wrongAnswers - result.wrongTITA);
+    const rawMarks = result.correctAnswers * 3 - penalised;
     const maxMarks = questions.length * 3;
     const attempted = result.correctAnswers + result.wrongAnswers;
     const attemptRate = questions.length
@@ -1007,7 +1135,12 @@ export default function SectionalTest({ user }: { user: any }) {
             <XCircle className="mx-auto text-red-500 mb-2" size={24} />
             <p className="text-3xl font-black text-red-600">{result.wrongAnswers}</p>
             <p className="text-xs font-bold uppercase text-muted-foreground mt-1">Wrong</p>
-            <p className="text-xs text-red-600 font-semibold mt-1">–{result.wrongAnswers} marks</p>
+            <p className="text-xs text-red-600 font-semibold mt-1">–{penalised} marks</p>
+            {result.wrongTITA > 0 && (
+              <p className="text-[10px] text-muted-foreground mt-1">
+                incl. {result.wrongTITA} TITA · no penalty
+              </p>
+            )}
           </Card>
           <Card className="p-5 text-center border-t-4 border-t-yellow-400">
             <AlertCircle className="mx-auto text-yellow-500 mb-2" size={24} />
