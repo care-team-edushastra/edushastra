@@ -17,6 +17,8 @@ const JWT_SECRET = process.env.JWT_SECRET || "cat-prep-secret-key";
 // --- Google Sheets Configuration ---
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 const MOCK_SPREADSHEET_ID = process.env.MOCK_SPREADSHEET_ID;
+// Separate spreadsheet for the GMAT sectional tests (falls back to SPREADSHEET_ID if unset)
+const GMAT_SPREADSHEET_ID = process.env.GMAT_SPREADSHEET_ID;
 const GOOGLE_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
 const GOOGLE_KEY = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
@@ -73,7 +75,15 @@ const SHEET_CONFIG: Record<string, string[]> = {
 PYQQuestions:   ["id", "section", "questionText", "questionType", "options", "correctAnswer", "answerTolerance", "explanation", "difficulty", "passageId", "targetExam"],
 PYQPassages:    ["id", "title", "text", "targetExam"],
 PYQResults:     ["id", "studentId", "paperId", "totalScore", "overallScaledScore", "percentile", "sectionResults", "studentAnswers", "timeSpent", "submittedAt"],
-  Announcements: ["id", "title", "content", "createdDate", "createdBy", "targetExam"]
+  Announcements: ["id", "title", "content", "createdDate", "createdBy", "targetExam"],
+
+  // ── GMAT sectional tests (live in GMAT_SPREADSHEET_ID) ──
+  // Question/stimulus columns are wider than the CAT ones: GMAT question types
+  // (table analysis, graphics interpretation, two-part, MSR) need extra fields.
+  GmatSectionalTests:     ["id", "name", "section", "durationMinutes", "questionIds", "passageIds", "targetExam", "publishedDate"],
+  GmatSectionalQuestions: ["id", "section", "questionText", "questionType", "options", "correctAnswer", "statements", "blanks", "twoPartOptions", "correctPart1", "correctPart2", "explanation", "difficulty", "passageId", "targetExam"],
+  GmatSectionalPassages:  ["id", "title", "kind", "text", "table", "chartImageUrl", "tabs", "targetExam"],
+  GmatSectionalResults:   ["id", "studentId", "testId", "section", "totalScore", "correctAnswers", "wrongAnswers", "skippedQuestions", "timeSpent", "studentAnswers", "scaledScore", "editsUsed", "reachedReview", "submittedAt"]
 };
 
 /**
@@ -85,8 +95,8 @@ function normalizeKey(str: string): string {
   return str.toLowerCase().replace(/[\s_\-]/g, "");
 }
 
-async function fetchSheetData(range: string) {
-  if (!SPREADSHEET_ID || !GOOGLE_EMAIL || !GOOGLE_KEY) {
+async function fetchSheetData(range: string, spreadsheetId: string | undefined = SPREADSHEET_ID) {
+  if (!spreadsheetId || !GOOGLE_EMAIL || !GOOGLE_KEY) {
     console.log(`Skipping Sheet read for [${range}]: Google Sheets not configured.`);
     return null;
   }
@@ -94,7 +104,7 @@ async function fetchSheetData(range: string) {
   try {
     console.log(`Fetching data from sheet: ${range}...`);
     const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
+      spreadsheetId,
       range: `${range}!A1:Z`, // Include header row to map columns
     });
 
@@ -142,8 +152,8 @@ async function fetchSheetData(range: string) {
  * Utility to append data to a Google Sheet
  * Header-aware: writes to columns based on the header row names
  */
-async function appendSheetData(range: string, data: any) {
-  if (!SPREADSHEET_ID || !GOOGLE_EMAIL || !GOOGLE_KEY) {
+async function appendSheetData(range: string, data: any, spreadsheetId: string | undefined = SPREADSHEET_ID) {
+  if (!spreadsheetId || !GOOGLE_EMAIL || !GOOGLE_KEY) {
     console.log(`Skipping Sheet append for [${range}]: Google Sheets not configured.`);
     return;
   }
@@ -151,7 +161,7 @@ async function appendSheetData(range: string, data: any) {
   try {
     // 1. Get the current headers to know which column is which
     const headerRes = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
+      spreadsheetId,
       range: `${range}!A1:Z1`,
     });
 
@@ -167,7 +177,7 @@ async function appendSheetData(range: string, data: any) {
         return val || "";
       });
       await sheets.spreadsheets.values.append({
-        spreadsheetId: SPREADSHEET_ID,
+        spreadsheetId,
         range: `${range}!A:A`,
         valueInputOption: "RAW",
         requestBody: { values: [row] },
@@ -189,7 +199,7 @@ async function appendSheetData(range: string, data: any) {
 
     console.log(`Attempting to append row to sheet: ${range} (mapped to ${row.length} columns)...`);
     const res = await sheets.spreadsheets.values.append({
-      spreadsheetId: SPREADSHEET_ID,
+      spreadsheetId,
       range: `${range}!A:A`,
       valueInputOption: "RAW",
       requestBody: { values: [row] },
@@ -226,6 +236,10 @@ mockResults: any[];
   pyqQuestions: any[];
   pyqPassages: any[];
   pyqResults: any[];
+  gmatSectionalTests: any[];
+  gmatSectionalQuestions: any[];
+  gmatSectionalPassages: any[];
+  gmatSectionalResults: any[];
 }
 
 const initialDB: DB = {
@@ -295,6 +309,10 @@ mockResults: [],
   pyqQuestions: [],
   pyqPassages: [],
   pyqResults: [],
+  gmatSectionalTests: [],
+  gmatSectionalQuestions: [],
+  gmatSectionalPassages: [],
+  gmatSectionalResults: [],
   announcements: [
     {
       id: "AN001",
@@ -311,7 +329,8 @@ function getLocalDB(): DB {
     fs.writeFileSync(DB_PATH, JSON.stringify(initialDB, null, 2));
     return initialDB;
   }
-  return JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
+  // Merge over defaults so an older db.json missing the newer collections still works
+  return { ...initialDB, ...JSON.parse(fs.readFileSync(DB_PATH, "utf-8")) };
 }
 
 function saveLocalDB(db: DB) {
@@ -404,6 +423,17 @@ async function getStudentRegistrationDate(reqUser: any): Promise<string | undefi
     return undefined;
   }
 }
+// Accepts a real array, a JSON string ("[\"Q1\",\"Q2\"]") or a plain comma list ("Q1, Q2")
+function toIdList(v: any): string[] {
+  if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean);
+  if (typeof v !== "string" || !v.trim()) return [];
+  const t = v.trim();
+  if (t.startsWith("[")) {
+    try { return toIdList(JSON.parse(t)); } catch { /* fall through to comma split */ }
+  }
+  return t.split(",").map((x) => x.trim()).filter(Boolean);
+}
+
 async function startServer() {
   const app = express();
   app.use(express.json());
@@ -1343,6 +1373,185 @@ app.get("/api/sectional-questions", authenticateToken, async (req: any, res) => 
   if (req.user.role !== "admin") return res.sendStatus(403);
   const questions =
     await fetchSheetData("SectionalQuestions") || getLocalDB().sectionalQuestions;
+  res.json(questions);
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// GMAT SECTIONAL TESTS — stored in a separate spreadsheet (GMAT_SPREADSHEET_ID)
+// Tabs: GmatSectionalTests, GmatSectionalQuestions, GmatSectionalPassages,
+//       GmatSectionalResults
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ─── GET /api/gmat-sectional-tests  ── list (questions trimmed to id/section) ─
+app.get("/api/gmat-sectional-tests", authenticateToken, async (req: any, res) => {
+  try {
+    const tests =
+      (await fetchSheetData("GmatSectionalTests", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatSectionalTests;
+    const questions =
+      (await fetchSheetData("GmatSectionalQuestions", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatSectionalQuestions;
+
+    const enriched = tests.map((t: any) => {
+      const qIds = toIdList(t.questionIds);
+      return {
+        ...t,
+        questions: questions
+          .filter((q: any) => qIds.includes(q.id))
+          .map((q: any) => ({ id: q.id, section: q.section })),
+      };
+    });
+    res.json(enriched);
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to load GMAT sectional tests" });
+  }
+});
+
+// ─── GET /api/gmat-sectional-test/:id  ── full test with questions + stimuli ─
+app.get("/api/gmat-sectional-test/:id", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const tests =
+      (await fetchSheetData("GmatSectionalTests", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatSectionalTests;
+    const test = tests.find((t: any) => t.id === id);
+    if (!test) return res.status(404).json({ message: "Test not found" });
+
+    const allQuestions =
+      (await fetchSheetData("GmatSectionalQuestions", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatSectionalQuestions;
+    const allPassages =
+      (await fetchSheetData("GmatSectionalPassages", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatSectionalPassages;
+
+    const qIds = toIdList(test.questionIds);
+    const pIds = toIdList(test.passageIds);
+
+    // Keep the order the test lists its questions in
+    const questions = qIds
+      .map((qid) => allQuestions.find((q: any) => q.id === qid))
+      .filter(Boolean);
+    const passages = allPassages.filter((p: any) => pIds.includes(p.id));
+
+    res.json({ ...test, questions, passages });
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to load GMAT test" });
+  }
+});
+
+// ─── GET /api/gmat-sectional-results  ── this student's past GMAT results ────
+app.get("/api/gmat-sectional-results", authenticateToken, async (req: any, res) => {
+  try {
+    const results =
+      (await fetchSheetData("GmatSectionalResults", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatSectionalResults;
+    res.json(results.filter((r: any) => r.studentId === req.user.id));
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to load results" });
+  }
+});
+
+// ─── POST /api/gmat-sectional-results  ── save a GMAT attempt ────────────────
+app.post("/api/gmat-sectional-results", authenticateToken, async (req: any, res) => {
+  try {
+    const { testId } = req.body;
+
+    const allResults =
+      (await fetchSheetData("GmatSectionalResults", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatSectionalResults;
+    const existing = allResults.find(
+      (r: any) => r.studentId === req.user.id && r.testId === testId
+    );
+    if (existing) {
+      return res.status(400).json({ message: "Already attempted this test." });
+    }
+
+    const result = {
+      ...req.body,
+      id: `GSR${Date.now()}`,
+      studentId: req.user.id,
+      submittedAt: new Date().toISOString(),
+    };
+
+    await appendSheetData("GmatSectionalResults", result, GMAT_SPREADSHEET_ID);
+
+    const db = getLocalDB();
+    db.gmatSectionalResults.push(result);
+    saveLocalDB(db);
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to save result" });
+  }
+});
+
+// ─── Admin: POST /api/gmat-sectional-tests  ── publish a GMAT sectional test ─
+app.post("/api/gmat-sectional-tests", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== "admin") return res.sendStatus(403);
+  try {
+    const { name, section, durationMinutes, questionIds, passageIds, targetExam } = req.body;
+    if (!name || !section || !questionIds?.length) {
+      return res.status(400).json({ message: "name, section, and questionIds are required" });
+    }
+
+    const newTest = {
+      id: `GST${Date.now()}`,
+      name,
+      section,
+      durationMinutes: durationMinutes || 45,
+      questionIds,
+      passageIds: passageIds || [],
+      targetExam: targetExam || "GMAT",
+      publishedDate: new Date().toISOString(),
+    };
+
+    await appendSheetData("GmatSectionalTests", newTest, GMAT_SPREADSHEET_ID);
+
+    const db = getLocalDB();
+    db.gmatSectionalTests.push(newTest);
+    saveLocalDB(db);
+
+    res.json({ success: true, testId: newTest.id });
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to publish test" });
+  }
+});
+
+// ─── Admin: POST /api/gmat-sectional-questions  ── add GMAT questions ────────
+app.post("/api/gmat-sectional-questions", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== "admin") return res.sendStatus(403);
+  try {
+    const questions: any[] = req.body.questions;
+    for (const q of questions) {
+      // questionType is passed through untouched (standard_mcq, table_analysis, …)
+      const newQ = {
+        ...q,
+        id: q.id || `GSQ${Date.now()}${Math.random().toString(36).substr(2, 4)}`,
+      };
+      await appendSheetData("GmatSectionalQuestions", newQ, GMAT_SPREADSHEET_ID);
+      const db = getLocalDB();
+      db.gmatSectionalQuestions.push(newQ);
+      saveLocalDB(db);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to add questions" });
+  }
+});
+
+// ─── Admin: POST /api/gmat-sectional-passages  ── add GMAT stimuli ───────────
+app.post("/api/gmat-sectional-passages", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== "admin") return res.sendStatus(403);
+  try {
+    const passage = { ...req.body, id: req.body.id || `GSP${Date.now()}` };
+    await appendSheetData("GmatSectionalPassages", passage, GMAT_SPREADSHEET_ID);
+    const db = getLocalDB();
+    db.gmatSectionalPassages.push(passage);
+    saveLocalDB(db);
+    res.json({ success: true, passageId: passage.id });
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to add passage" });
+  }
+});
+
+// ─── Admin: GET /api/gmat-sectional-questions  ── list all GMAT questions ────
+app.get("/api/gmat-sectional-questions", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== "admin") return res.sendStatus(403);
+  const questions =
+    (await fetchSheetData("GmatSectionalQuestions", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatSectionalQuestions;
   res.json(questions);
 });
   app.get("/api/performance", authenticateToken, async (req: any, res) => {
