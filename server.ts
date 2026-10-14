@@ -101,7 +101,7 @@ function normalizeKey(str: string): string {
   return str.toLowerCase().replace(/[\s_\-]/g, "");
 }
 
-const GMAT_MOCK_JSON_FIELDS = ["statements", "blanks", "twoPartOptions", "table", "tabs", "sectionResults", "sectionOrder"];
+const GMAT_MOCK_JSON_FIELDS = ["statements", "blanks", "table", "tabs", "sectionResults", "sectionOrder"];
 
 async function fetchSheetData(range: string, spreadsheetId: string | undefined = SPREADSHEET_ID) {
   if (!spreadsheetId || !GOOGLE_EMAIL || !GOOGLE_KEY) {
@@ -131,6 +131,29 @@ async function fetchSheetData(range: string, spreadsheetId: string | undefined =
     return dataRows.map(row => {
       const obj: any = {};
       expectedKeys.forEach(key => {
+        // GMAT mock sheets: clean up the simple columns the client can't forgive.
+        if (range.startsWith("GmatMock")) {
+          const gi = headers.indexOf(normalizeKey(key));
+          const cell = gi !== -1 ? String(row[gi] ?? "").trim() : "";
+          if (key === "id" || key === "passageId") { obj[key] = cell; return; }
+          if (range === "GmatMockQuestions" && key === "section") {
+            const v = cell.toLowerCase().replace(/[\s_\-]/g, "");
+            obj[key] = v.includes("quant") || v === "qr" || v === "qa" ? "Quant"
+              : v.includes("verbal") || v === "vr" || v.includes("varc") ? "Verbal"
+              : "DataInsights";
+            return;
+          }
+          // options / twoPartOptions: JSON array OR one option per line
+          if (key === "options" || key === "twoPartOptions") {
+            let list: string[] = [];
+            if (cell.startsWith("[")) {
+              try { const arr = JSON.parse(cell); if (Array.isArray(arr)) list = arr.map((x: any) => String(x)); } catch { /* fall through */ }
+            }
+            if (!list.length && cell) list = cell.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+            obj[key] = list;
+            return;
+          }
+        }
         // GMAT mock sheets: structured columns (statements, blanks, table, tabs,
         // sectionResults, …) are stored as JSON text and handed to the client as
         // real objects. An empty / invalid cell becomes undefined (key omitted).
