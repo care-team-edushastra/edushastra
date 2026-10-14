@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
  import SectionalTest from "./sectional-test";
 import SectionalTestGMAT from "./sectional-test-gmat";
 import MockTest from "./mock-test";
+import MockTestGMAT from "./mock-test-gmat";
 import PYQTest from "./pyq-test";
 import DailyPractice from "./daily-practice";
 import "katex/dist/katex.min.css";
@@ -318,7 +319,11 @@ export default function App() {
                   ? <SectionalTestGMAT user={user} />
                   : <SectionalTest user={user} />
               )}
-              {activeTab === "mock" && <MockTest user={user} />}
+           {activeTab === "mock" && (
+  (user.targetExam || "").toString().trim().toUpperCase() === "GMAT"
+    ? <MockTestGMAT user={user} />
+    : <MockTest user={user} />
+)}
            {activeTab === "pyq" && <PYQTest user={user} />}
             {activeTab === "admin" && <AdminDashboard user={user} />}
           </motion.div>
