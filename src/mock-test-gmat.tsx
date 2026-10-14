@@ -150,7 +150,7 @@ interface FullMockResult {
 }
 
 // ── Shapes that actually come back from the server ────────────────────────
-// GET /api/mock-tests returns lightweight summaries (id/section per question
+// GET /api/gmat-mock-tests returns lightweight summaries (id/section per question
 // only). A single MockTest row holds questions from ALL THREE sections
 // mixed together (grouped by q.section) rather than three separately
 // authored sectional tests.
@@ -171,7 +171,7 @@ interface MockTestSummary {
   questions: MockQuestionRef[];
 }
 
-// GET /api/mock-test/:id returns raw MockQuestion / MockPassage rows.
+// GET /api/gmat-mock-test/:id returns raw MockQuestion / MockPassage rows.
 // Unlike SectionalQuestions/SectionalPassages, the server does NOT unpack
 // these for the Mock endpoints (fetchSheetData only special-cases
 // range === "SectionalQuestions" / "SectionalPassages"), so:
@@ -1051,11 +1051,11 @@ export default function GmatMockTests({ user }: { user: any }) {
   }, [currentSectionData]);
 
   // Fetch Mocks — these paths match the routes actually registered on the
-  // server (/api/mock-tests, /api/mock-results).
+  // server (/api/gmat-mock-tests, /api/mock-results).
   useEffect(() => {
     async function loadData() {
       try {
-        const [mocks, results] = await Promise.all([apiRequest("/mock-tests"), apiRequest("/mock-results")]);
+        const [mocks, results] = await Promise.all([apiRequest("/gmat-mock-tests"), apiRequest("/mock-results")]);
         setAvailableMocks(mocks || []);
         const resMap: Record<string, FullMockResult> = {};
         (results || []).forEach((r: RawMockResult) => {
@@ -1110,13 +1110,13 @@ export default function GmatMockTests({ user }: { user: any }) {
     }
   }, [displayedQIdx, currentSectionData, view]);
 
-  // Fetches the full question set for a mock (GET /api/mock-test/:id) and
+  // Fetches the full question set for a mock (GET /api/gmat-mock-test/:id) and
   // builds the three-section FullMockTest shape the rest of the component
   // expects.
   const fetchFullMock = async (mockId: string): Promise<FullMockTest | null> => {
     setDetailLoadingId(mockId);
     try {
-      const detail = await apiRequest(`/mock-test/${mockId}`);
+      const detail = await apiRequest(`/gmat-mock-test/${mockId}`);
       return buildFullMockTest(detail);
     } catch {
       toast.error("Failed to load this mock test's questions");
