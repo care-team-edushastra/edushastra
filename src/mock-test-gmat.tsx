@@ -999,7 +999,7 @@ function StatusDot({
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────────────────
 
-export default function gmatMockTests({ user }: { user: any }) {
+export default function GmatMockTests({ user }: { user: any }) {
   const [view, setView] = useState<"list" | "orderSelect" | "testing" | "reviewEdit" | "break" | "result">("list");
   const [availableMocks, setAvailableMocks] = useState<MockTestSummary[]>([]);
   const [selectedMock, setSelectedMock] = useState<FullMockTest | null>(null);
