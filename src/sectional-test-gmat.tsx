@@ -1171,7 +1171,7 @@ export default function SectionalTestGMAT({ user }: { user: any }) {
   const loadTests = async () => {
     setLoading(true);
     try {
-      const [tests, prevResults] = await Promise.all([apiRequest("/sectional-tests"), apiRequest("/sectional-results")]);
+      const [tests, prevResults] = await Promise.all([apiRequest("/gmat-sectional-tests"), apiRequest("/gmat-sectional-results")]);
       setAvailableTests(
         (tests || []).map((t: any) => ({
           ...t,
@@ -1234,7 +1234,7 @@ export default function SectionalTestGMAT({ user }: { user: any }) {
     setTestLoading(true);
     setLoadingTestId(test.id);
     try {
-      const fullTest = normalizeGmatTest(await apiRequest(`/sectional-test/${test.id}`));
+      const fullTest = normalizeGmatTest(await apiRequest(`/gmat-sectional-test/${test.id}`));
       const prev = attempts[test.id];
       if (prev) {
         setSelectedTest(fullTest);
@@ -1398,7 +1398,7 @@ export default function SectionalTestGMAT({ user }: { user: any }) {
     try {
       // editsUsed / reachedReview are sent as text so a value of 0 / false
       // isn't dropped as "empty" when it's written to the Google Sheet.
-      await apiRequest("/sectional-results", {
+      await apiRequest("/gmat-sectional-results", {
         method: "POST",
         body: JSON.stringify({
           ...payload,
