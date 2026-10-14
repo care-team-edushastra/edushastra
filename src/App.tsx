@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
  import SectionalTest from "./sectional-test";
+import SectionalTestGMAT from "./sectional-test-gmat";
 import MockTest from "./mock-test";
 import PYQTest from "./pyq-test";
 import DailyPractice from "./daily-practice";
@@ -312,7 +313,11 @@ export default function App() {
            {activeTab === "daily-test" && <DailyPractice user={user} />}
             {activeTab === "history" && <TestHistory user={user} />}
             {activeTab === "analytics" && <Analytics user={user} />}
-              {activeTab === "sectional" && <SectionalTest user={user} />}
+              {activeTab === "sectional" && (
+                (user.targetExam || "").toString().trim().toUpperCase() === "GMAT"
+                  ? <SectionalTestGMAT user={user} />
+                  : <SectionalTest user={user} />
+              )}
               {activeTab === "mock" && <MockTest user={user} />}
            {activeTab === "pyq" && <PYQTest user={user} />}
             {activeTab === "admin" && <AdminDashboard user={user} />}
