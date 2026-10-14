@@ -957,11 +957,17 @@ app.get("/api/mock-test/:id", authenticateToken, async (req, res) => {
     const allPassages =
       (await fetchSheetData("MockPassages", MOCK_SPREADSHEET_ID)) || getLocalDB().mockPassages;
  
-    const qIds: string[] = Array.isArray(test.questionIds) ? test.questionIds : [];
-    const pIds: string[] = Array.isArray(test.passageIds) ? test.passageIds : [];
+    // passageIds is not auto-parsed by fetchSheetData, so accept array / JSON / comma list
+    const qIds: string[] = toIdList(test.questionIds);
+    const pIds: string[] = toIdList(test.passageIds);
  
     const questions = allQuestions.filter((q: any) => qIds.includes(q.id));
-    const passages = allPassages.filter((p: any) => pIds.includes(p.id));
+    // Include passages listed on the test AND any passage a selected question points to
+    const neededPassageIds = new Set<string>([
+      ...pIds,
+      ...questions.map((q: any) => String(q.passageId || "").trim()).filter(Boolean),
+    ]);
+    const passages = allPassages.filter((p: any) => neededPassageIds.has(String(p.id).trim()));
  
     res.json({ ...test, questions, passages });
   } catch (err: any) {
@@ -1300,11 +1306,17 @@ app.get("/api/sectional-test/:id", authenticateToken, async (req, res) => {
     const allPassages =
       await fetchSheetData("SectionalPassages") || getLocalDB().sectionalPassages;
  
-    const qIds: string[] = Array.isArray(test.questionIds) ? test.questionIds : [];
-    const pIds: string[] = Array.isArray(test.passageIds) ? test.passageIds : [];
+    // passageIds is not auto-parsed by fetchSheetData, so accept array / JSON / comma list
+    const qIds: string[] = toIdList(test.questionIds);
+    const pIds: string[] = toIdList(test.passageIds);
  
     const questions = allQuestions.filter((q: any) => qIds.includes(q.id));
-    const passages = allPassages.filter((p: any) => pIds.includes(p.id));
+    // Include passages listed on the test AND any passage a selected question points to
+    const neededPassageIds = new Set<string>([
+      ...pIds,
+      ...questions.map((q: any) => String(q.passageId || "").trim()).filter(Boolean),
+    ]);
+    const passages = allPassages.filter((p: any) => neededPassageIds.has(String(p.id).trim()));
  
     res.json({ ...test, questions, passages });
   } catch (err: any) {
