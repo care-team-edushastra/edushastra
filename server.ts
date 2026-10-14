@@ -83,6 +83,12 @@ PYQResults:     ["id", "studentId", "paperId", "totalScore", "overallScaledScore
   GmatSectionalTests:     ["id", "name", "section", "durationMinutes", "questionIds", "passageIds", "targetExam", "publishedDate"],
   GmatSectionalQuestions: ["id", "section", "questionText", "questionType", "options", "correctAnswer", "statements", "blanks", "twoPartOptions", "correctPart1", "correctPart2", "explanation", "difficulty", "passageId", "targetExam"],
   GmatSectionalPassages:  ["id", "title", "kind", "text", "table", "chartImageUrl", "tabs", "targetExam"],
+  // ── GMAT full-length mock tests (also live in GMAT_SPREADSHEET_ID) ──
+  GmatMockTests:     ["id", "name", "description", "totalDurationMinutes", "sectionDurationMinutes", "questionIds", "passageIds", "targetExam", "publishedDate", "studentsAttempted"],
+  GmatMockQuestions: ["id", "section", "questionText", "questionType", "options", "correctAnswer", "statements", "blanks", "twoPartOptions", "correctPart1", "correctPart2", "explanation", "difficulty", "passageId", "targetExam"],
+  GmatMockPassages:  ["id", "title", "kind", "text", "table", "chartImageUrl", "tabs", "targetExam"],
+  GmatMockResults:   ["id", "studentId", "testId", "totalScore", "overallScaledScore", "percentile", "sectionResults", "studentAnswers", "sectionOrder", "timeSpent", "submittedAt"],
+
   GmatSectionalResults:   ["id", "studentId", "testId", "section", "totalScore", "correctAnswers", "wrongAnswers", "skippedQuestions", "timeSpent", "studentAnswers", "scaledScore", "editsUsed", "reachedReview", "submittedAt"]
 };
 
@@ -94,6 +100,8 @@ function normalizeKey(str: string): string {
   if (!str) return "";
   return str.toLowerCase().replace(/[\s_\-]/g, "");
 }
+
+const GMAT_MOCK_JSON_FIELDS = ["statements", "blanks", "twoPartOptions", "table", "tabs", "sectionResults", "sectionOrder"];
 
 async function fetchSheetData(range: string, spreadsheetId: string | undefined = SPREADSHEET_ID) {
   if (!spreadsheetId || !GOOGLE_EMAIL || !GOOGLE_KEY) {
@@ -123,6 +131,19 @@ async function fetchSheetData(range: string, spreadsheetId: string | undefined =
     return dataRows.map(row => {
       const obj: any = {};
       expectedKeys.forEach(key => {
+        // GMAT mock sheets: structured columns (statements, blanks, table, tabs,
+        // sectionResults, …) are stored as JSON text and handed to the client as
+        // real objects. An empty / invalid cell becomes undefined (key omitted).
+        if (range.startsWith("GmatMock") && GMAT_MOCK_JSON_FIELDS.includes(key)) {
+          const ci = headers.indexOf(normalizeKey(key));
+          const rawCell = ci !== -1 ? String(row[ci] ?? "").trim() : "";
+          let parsed: any = undefined;
+          if (rawCell.startsWith("[") || rawCell.startsWith("{")) {
+            try { parsed = JSON.parse(rawCell); } catch { parsed = undefined; }
+          }
+          obj[key] = parsed;
+          return;
+        }
      const index = headers.indexOf(normalizeKey(key));
         if (index !== -1) {
           let val = row[index] || "";
@@ -144,6 +165,17 @@ async function fetchSheetData(range: string, spreadsheetId: string | undefined =
     });
   } catch (err: any) {
     console.error(`❌ Error fetching sheet ${range}:`, err.message);
+    if (String(err.message).includes("Unable to parse range")) {
+      // Almost always a wrong tab name or the wrong spreadsheet ID — show what exists
+      try {
+        const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: "properties.title,sheets.properties.title" });
+        const tabs = (meta.data.sheets || []).map((sh: any) => `"${sh.properties?.title}"`).join(", ");
+        console.error(`   ↳ Spreadsheet "${meta.data.properties?.title}" (${spreadsheetId}) has tabs: ${tabs}`);
+        console.error(`   ↳ Looking for tab: "${range}"`);
+      } catch (e: any) {
+        console.error(`   ↳ Could not open spreadsheet ${spreadsheetId}: ${e.message} (check the ID and that the service account has access)`);
+      }
+    }
     return null;
   }
 }
@@ -240,6 +272,10 @@ mockResults: any[];
   gmatSectionalQuestions: any[];
   gmatSectionalPassages: any[];
   gmatSectionalResults: any[];
+  gmatMockTests: any[];
+  gmatMockQuestions: any[];
+  gmatMockPassages: any[];
+  gmatMockResults: any[];
 }
 
 const initialDB: DB = {
@@ -313,6 +349,10 @@ mockResults: [],
   gmatSectionalQuestions: [],
   gmatSectionalPassages: [],
   gmatSectionalResults: [],
+  gmatMockTests: [],
+  gmatMockQuestions: [],
+  gmatMockPassages: [],
+  gmatMockResults: [],
   announcements: [
     {
       id: "AN001",
@@ -1552,6 +1592,194 @@ app.get("/api/gmat-sectional-questions", authenticateToken, async (req: any, res
   if (req.user.role !== "admin") return res.sendStatus(403);
   const questions =
     (await fetchSheetData("GmatSectionalQuestions", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatSectionalQuestions;
+  res.json(questions);
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// GMAT FULL-LENGTH MOCK TESTS — separate spreadsheet (GMAT_SPREADSHEET_ID)
+// Tabs: GmatMockTests, GmatMockQuestions, GmatMockPassages, GmatMockResults
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ─── GET /api/gmat-mock-tests  ── list (questions trimmed to id/section) ─────
+app.get("/api/gmat-mock-tests", authenticateToken, async (req: any, res) => {
+  try {
+    const tests =
+      (await fetchSheetData("GmatMockTests", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatMockTests;
+    const questions =
+      (await fetchSheetData("GmatMockQuestions", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatMockQuestions;
+
+    const enriched = tests.map((t: any) => {
+      const qIds = toIdList(t.questionIds);
+      return {
+        ...t,
+        totalDurationMinutes: Number(t.totalDurationMinutes) || 135,
+        sectionDurationMinutes: Number(t.sectionDurationMinutes) || 45,
+        studentsAttempted: Number(t.studentsAttempted) || 0,
+        questions: questions
+          .filter((q: any) => qIds.includes(q.id))
+          .map((q: any) => ({ id: q.id, section: q.section })),
+      };
+    });
+    res.json(enriched);
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to load GMAT mock tests" });
+  }
+});
+
+// ─── GET /api/gmat-mock-test/:id  ── full mock with questions + stimuli ─────
+app.get("/api/gmat-mock-test/:id", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const tests =
+      (await fetchSheetData("GmatMockTests", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatMockTests;
+    const test = tests.find((t: any) => t.id === id);
+    if (!test) return res.status(404).json({ message: "Mock test not found" });
+
+    const allQuestions =
+      (await fetchSheetData("GmatMockQuestions", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatMockQuestions;
+    const allPassages =
+      (await fetchSheetData("GmatMockPassages", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatMockPassages;
+
+    const qIds = toIdList(test.questionIds);
+    const pIds = toIdList(test.passageIds);
+
+    // Keep the order the mock lists its questions in
+    const questions = qIds
+      .map((qid) => allQuestions.find((q: any) => q.id === qid))
+      .filter(Boolean);
+    const passages = allPassages.filter((p: any) => pIds.includes(p.id));
+
+    res.json({
+      ...test,
+      totalDurationMinutes: Number(test.totalDurationMinutes) || 135,
+      sectionDurationMinutes: Number(test.sectionDurationMinutes) || 45,
+      questions,
+      passages,
+    });
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to load GMAT mock test" });
+  }
+});
+
+// ─── GET /api/gmat-mock-results  ── this student's past GMAT mock attempts ───
+app.get("/api/gmat-mock-results", authenticateToken, async (req: any, res) => {
+  try {
+    const results =
+      (await fetchSheetData("GmatMockResults", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatMockResults;
+    res.json(results.filter((r: any) => r.studentId === req.user.id));
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to load GMAT mock results" });
+  }
+});
+
+// ─── POST /api/gmat-mock-results  ── save a completed GMAT mock attempt ─────
+app.post("/api/gmat-mock-results", authenticateToken, async (req: any, res) => {
+  try {
+    const { testId } = req.body;
+
+    const allResults =
+      (await fetchSheetData("GmatMockResults", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatMockResults;
+    const existing = allResults.find(
+      (r: any) => r.studentId === req.user.id && r.testId === testId
+    );
+    if (existing) {
+      return res.status(400).json({ message: "Already attempted this mock test." });
+    }
+
+    const result = {
+      ...req.body,
+      id: `GMR${Date.now()}`,
+      studentId: req.user.id,
+      submittedAt: new Date().toISOString(),
+    };
+
+    await appendSheetData("GmatMockResults", result, GMAT_SPREADSHEET_ID);
+
+    const db = getLocalDB();
+    db.gmatMockResults.push(result);
+    saveLocalDB(db);
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to save GMAT mock result" });
+  }
+});
+
+// ─── Admin: POST /api/gmat-mock-tests  ── publish a GMAT mock test ───────────
+app.post("/api/gmat-mock-tests", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== "admin") return res.sendStatus(403);
+  try {
+    const { name, description, totalDurationMinutes, sectionDurationMinutes, questionIds, passageIds, targetExam } = req.body;
+    if (!name || !questionIds?.length) {
+      return res.status(400).json({ message: "name and questionIds are required" });
+    }
+
+    const newTest = {
+      id: `GMT${Date.now()}`,
+      name,
+      description: description || "",
+      totalDurationMinutes: totalDurationMinutes || 135,
+      sectionDurationMinutes: sectionDurationMinutes || 45,
+      questionIds,
+      passageIds: passageIds || [],
+      targetExam: targetExam || "GMAT",
+      publishedDate: new Date().toISOString(),
+      studentsAttempted: 0,
+    };
+
+    await appendSheetData("GmatMockTests", newTest, GMAT_SPREADSHEET_ID);
+
+    const db = getLocalDB();
+    db.gmatMockTests.push(newTest);
+    saveLocalDB(db);
+
+    res.json({ success: true, testId: newTest.id });
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to publish GMAT mock test" });
+  }
+});
+
+// ─── Admin: POST /api/gmat-mock-questions  ── add GMAT mock questions ────────
+app.post("/api/gmat-mock-questions", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== "admin") return res.sendStatus(403);
+  try {
+    const questions: any[] = req.body.questions;
+    for (const q of questions) {
+      const newQ = {
+        ...q,
+        id: q.id || `GMQ${Date.now()}${Math.random().toString(36).substr(2, 4)}`,
+      };
+      await appendSheetData("GmatMockQuestions", newQ, GMAT_SPREADSHEET_ID);
+      const db = getLocalDB();
+      db.gmatMockQuestions.push(newQ);
+      saveLocalDB(db);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to add GMAT mock questions" });
+  }
+});
+
+// ─── Admin: POST /api/gmat-mock-passages  ── add GMAT mock stimuli ───────────
+app.post("/api/gmat-mock-passages", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== "admin") return res.sendStatus(403);
+  try {
+    const passage = { ...req.body, id: req.body.id || `GMP${Date.now()}` };
+    await appendSheetData("GmatMockPassages", passage, GMAT_SPREADSHEET_ID);
+    const db = getLocalDB();
+    db.gmatMockPassages.push(passage);
+    saveLocalDB(db);
+    res.json({ success: true, passageId: passage.id });
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to add GMAT mock passage" });
+  }
+});
+
+// ─── Admin: GET /api/gmat-mock-questions  ── list all GMAT mock questions ────
+app.get("/api/gmat-mock-questions", authenticateToken, async (req: any, res) => {
+  if (req.user.role !== "admin") return res.sendStatus(403);
+  const questions =
+    (await fetchSheetData("GmatMockQuestions", GMAT_SPREADSHEET_ID)) || getLocalDB().gmatMockQuestions;
   res.json(questions);
 });
   app.get("/api/performance", authenticateToken, async (req: any, res) => {
