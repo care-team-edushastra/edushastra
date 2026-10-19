@@ -56,6 +56,7 @@ interface Passage {
 
 interface DailyTest {
   id: string;
+  name?: string; // optional display name; falls back to the date label
   testDate: string; // ISO date string, e.g. "2026-09-01" — one test per day
   durationMinutes: number;
   questions: DailyQuestion[];
@@ -338,6 +339,10 @@ function formatDayLabel(dateStr: string) {
     month: d.toLocaleDateString(undefined, { month: "short" }),
     full: d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
   };
+}
+
+function testTitle(t: { name?: string; testDate: string }) {
+  return (t.name || "").trim() || `Daily Practice · ${formatDayLabel(t.testDate).full}`;
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -704,9 +709,12 @@ export default function DailyPractice({ user }: { user: any }) {
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-bold text-base truncate">Daily Practice · {label.full}</h3>
+                        <h3 className="font-bold text-base truncate">{testTitle(test)}</h3>
                         <Badge className={`text-[10px] font-bold ${meta.badgeClass}`}>{meta.label}</Badge>
                       </div>
+                      {(test.name || "").trim() && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{label.full}</p>
+                      )}
                       <div className="flex gap-4 text-xs text-muted-foreground mt-1">
                         <span className="flex items-center gap-1">
                           <Clock size={12} /> {test.durationMinutes || 40} min
@@ -768,7 +776,10 @@ export default function DailyPractice({ user }: { user: any }) {
             <div className={`text-xs font-bold uppercase tracking-widest ${ACCENT.textColor} mb-1`}>
               Daily Practice
             </div>
-            <CardTitle className="text-2xl">{label.full}</CardTitle>
+            <CardTitle className="text-2xl">{(selectedTest.name || "").trim() || label.full}</CardTitle>
+            {(selectedTest.name || "").trim() && (
+              <p className="text-xs text-muted-foreground mt-1">{label.full}</p>
+            )}
           </CardHeader>
           <CardContent className="pt-6 space-y-6">
             <div className="grid grid-cols-3 gap-4 text-center">
@@ -845,7 +856,7 @@ export default function DailyPractice({ user }: { user: any }) {
             <div className="flex items-center gap-3">
               <Badge className={`${ACCENT.color} text-white border-none`}>Daily</Badge>
               <span className="text-sm font-medium hidden sm:block truncate max-w-[200px]">
-                {formatDayLabel(selectedTest.testDate).full}
+                {(selectedTest.name || "").trim() || formatDayLabel(selectedTest.testDate).full}
               </span>
             </div>
             <div className="flex items-center gap-4">
@@ -1098,7 +1109,7 @@ export default function DailyPractice({ user }: { user: any }) {
             <Button variant="ghost" onClick={() => setReviewMode(false)} className="gap-1">
               <ArrowLeft size={16} /> Back to Results
             </Button>
-            <span className="font-bold">{label.full} · Review</span>
+            <span className="font-bold">{(selectedTest.name || "").trim() || label.full} · Review</span>
           </div>
           <div className="space-y-4">
             {questions.map((q, idx) => {
@@ -1221,7 +1232,10 @@ export default function DailyPractice({ user }: { user: any }) {
         <Card className={`border-2 ${ACCENT.borderColor} overflow-hidden`}>
           <div className={`${ACCENT.color} px-6 py-5 text-white`}>
             <p className="text-sm font-bold uppercase tracking-widest opacity-80">Daily Practice</p>
-            <h2 className="text-2xl font-black mt-1">{label.full}</h2>
+            <h2 className="text-2xl font-black mt-1">{(selectedTest.name || "").trim() || label.full}</h2>
+            {(selectedTest.name || "").trim() && (
+              <p className="text-xs opacity-80 mt-1">{label.full}</p>
+            )}
           </div>
           <CardContent className="pt-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
