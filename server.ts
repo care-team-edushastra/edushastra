@@ -60,7 +60,7 @@ const SHEET_CONFIG: Record<string, string[]> = {
   VideoLectures: ["id", "topicName", "section", "googleSheetLink", "googleDriveLink", "duration", "instructorName", "dateUploaded"],
   UnverifiedQuestions: ["id", "section", "questionText", "options", "correctAnswer", "explanation", "difficulty", "passageId", "targetExam"],
   ApprovedQuestions: ["id", "section", "questionText", "options", "correctAnswer", "explanation", "difficulty", "passageId", "targetExam", "approvedDate"],
-  DailyTests: ["id", "testDate", "questionIds", "durationMinutes", "passageIds", "targetExam"],
+  DailyTests: ["id", "name", "testDate", "questionIds", "durationMinutes", "passageIds", "targetExam"],
   DailyPassages: ["id", "title", "text", "targetExam"],
   TestResults: ["id", "studentId", "testDate", "testId", "totalScore", "correctAnswers", "wrongAnswers", "skippedQuestions", "timeSpent", "sectionScores", "studentAnswers"],
    SectionalTests:   ["id", "name", "section", "durationMinutes", "questionIds", "passageIds", "targetExam", "publishedDate"],
