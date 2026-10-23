@@ -56,8 +56,8 @@ if (SPREADSHEET_ID && GOOGLE_EMAIL && GOOGLE_KEY) {
  */
 const SHEET_CONFIG: Record<string, string[]> = {
   Students: ["id", "email", "password", "name", "phone", "registrationDate", "status", "role", "targetExam"],
-  CourseMaterials: ["id", "topicName", "section", "googleSheetLink", "googleDriveLink", "description", "dateAdded"],
-  VideoLectures: ["id", "topicName", "section", "googleSheetLink", "googleDriveLink", "duration", "instructorName", "dateUploaded"],
+  CourseMaterials: ["id", "topicName", "section", "googleSheetLink", "googleDriveLink", "description", "dateAdded", "targetExam"],
+  VideoLectures: ["id", "topicName", "section", "googleSheetLink", "googleDriveLink", "duration", "instructorName", "dateUploaded", "targetExam"],
   UnverifiedQuestions: ["id", "section", "questionText", "options", "correctAnswer", "explanation", "difficulty", "passageId", "targetExam"],
   ApprovedQuestions: ["id", "section", "questionText", "options", "correctAnswer", "explanation", "difficulty", "passageId", "targetExam", "approvedDate"],
   DailyTests: ["id", "name", "testDate", "questionIds", "durationMinutes", "passageIds", "targetExam"],
