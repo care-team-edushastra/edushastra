@@ -112,6 +112,10 @@ export default function App() {
   const [showMobileHeader, setShowMobileHeader] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
 
+ const canSeePyq =
+    user?.role === "admin" ||
+    (user?.targetExam || "").toString().trim().toUpperCase() === "CAT";
+ 
   useEffect(() => {
     const handleScroll = () => {
       if (window.scrollY > lastScrollY && window.scrollY > 100) {
@@ -228,8 +232,9 @@ export default function App() {
                   <SidebarItem icon={Video} label="Video Lectures" active={activeTab === "videos"} onClick={() => { setActiveTab("videos"); setIsMobileMenuOpen(false); }} />
                   <SidebarItem icon={History} label="Test History" active={activeTab === "history"} onClick={() => { setActiveTab("history"); setIsMobileMenuOpen(false); }} />
                   <SidebarItem icon={BarChart3} label="Analytics" active={activeTab === "analytics"} onClick={() => { setActiveTab("analytics"); setIsMobileMenuOpen(false); }} />
-                  <SidebarItem icon={ClipboardList} label="PYQ Papers" active={activeTab === "pyq"} onClick={() => { setActiveTab("pyq"); setIsMobileMenuOpen(false); }} />
-                  {user.role === "admin" && (
+                  {canSeePyq && (
+                    <SidebarItem icon={ClipboardList} label="PYQ Papers" active={activeTab === "pyq"} onClick={() => { setActiveTab("pyq"); setIsMobileMenuOpen(false); }} />
+                  )}                  {user.role === "admin" && (
                     <>
                       <div className="pt-6 pb-2 text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] px-3">Admin Panel</div>
                       <SidebarItem icon={ShieldCheck} label="Admin Dashboard" active={activeTab === "admin"} onClick={() => { setActiveTab("admin"); setIsMobileMenuOpen(false); }} />
@@ -273,8 +278,9 @@ export default function App() {
             <SidebarItem icon={Video} label="Video Lectures" active={activeTab === "videos"} onClick={() => setActiveTab("videos")} />
             <SidebarItem icon={History} label="Test History" active={activeTab === "history"} onClick={() => setActiveTab("history")} />
             <SidebarItem icon={BarChart3} label="Analytics" active={activeTab === "analytics"} onClick={() => setActiveTab("analytics")} />
-           <SidebarItem icon={ClipboardList} label="PYQ Papers" active={activeTab === "pyq"} onClick={() => setActiveTab("pyq")} /> 
-            
+           {canSeePyq && (
+             <SidebarItem icon={ClipboardList} label="PYQ Papers" active={activeTab === "pyq"} onClick={() => setActiveTab("pyq")} />
+           )}            
             {user.role === "admin" && (
               <>
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Admin Panel</div>
@@ -324,8 +330,8 @@ export default function App() {
     ? <MockTestGMAT user={user} />
     : <MockTest user={user} />
 )}
-           {activeTab === "pyq" && <PYQTest user={user} />}
-            {activeTab === "admin" && <AdminDashboard user={user} />}
+           {activeTab === "pyq" && canSeePyq && <PYQTest user={user} />}
+           {activeTab === "admin" && <AdminDashboard user={user} />}
           </motion.div>
         </AnimatePresence>
       </main>
