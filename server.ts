@@ -486,6 +486,13 @@ async function getStudentRegistrationDate(reqUser: any): Promise<string | undefi
     return undefined;
   }
 }
+// PYQ papers are CAT-only: admins always pass, students must have targetExam = CAT
+function canAccessPyq(user: any): boolean {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  return String(user.targetExam || "").trim().toUpperCase() === "CAT";
+}
+
 // Accepts a real array, a JSON string ("[\"Q1\",\"Q2\"]") or a plain comma list ("Q1, Q2")
 function toIdList(v: any): string[] {
   if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean);
@@ -1105,6 +1112,7 @@ app.get("/api/mock-questions", authenticateToken, async (req: any, res) => {
   res.json(questions);
 });// ─── GET /api/pyq-papers  ── list of PYQ papers for this student ─────────────
 app.get("/api/pyq-papers", authenticateToken, async (req: any, res) => {
+  if (!canAccessPyq(req.user)) return res.status(403).json({ message: "PYQ papers are available to CAT students only." });
   try {
     let papers =
       (await fetchSheetData("PYQPapers", MOCK_SPREADSHEET_ID)) || getLocalDB().pyqPapers;
@@ -1130,7 +1138,8 @@ app.get("/api/pyq-papers", authenticateToken, async (req: any, res) => {
 });
 
 // ─── GET /api/pyq-paper/:id  ── full paper with all questions + passages ─────
-app.get("/api/pyq-paper/:id", authenticateToken, async (req, res) => {
+app.get("/api/pyq-paper/:id", authenticateToken, async (req: any, res) => {
+  if (!canAccessPyq(req.user)) return res.status(403).json({ message: "PYQ papers are available to CAT students only." });
   const { id } = req.params;
   try {
     const papers =
@@ -1158,6 +1167,7 @@ app.get("/api/pyq-paper/:id", authenticateToken, async (req, res) => {
 
 // ─── GET /api/pyq-results  ── this student's past PYQ attempts ───────────────
 app.get("/api/pyq-results", authenticateToken, async (req: any, res) => {
+  if (!canAccessPyq(req.user)) return res.status(403).json({ message: "PYQ papers are available to CAT students only." });
   try {
     const results =
       (await fetchSheetData("PYQResults", MOCK_SPREADSHEET_ID)) || getLocalDB().pyqResults;
@@ -1169,6 +1179,7 @@ app.get("/api/pyq-results", authenticateToken, async (req: any, res) => {
 
 // ─── POST /api/pyq-results  ── save a completed PYQ attempt ──────────────────
 app.post("/api/pyq-results", authenticateToken, async (req: any, res) => {
+  if (!canAccessPyq(req.user)) return res.status(403).json({ message: "PYQ papers are available to CAT students only." });
   try {
     const { paperId } = req.body;
 
