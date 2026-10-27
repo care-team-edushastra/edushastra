@@ -7,12 +7,18 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { google } from "googleapis";
 import { GoogleGenAI, Type } from "@google/genai";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || "cat-prep-secret-key";
+const JWT_SECRET = process.env.JWT_SECRET as string;
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  console.error("FATAL: JWT_SECRET is missing or too short");
+  process.exit(1);
+}
 
 // --- Google Sheets Configuration ---
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
@@ -302,30 +308,7 @@ mockResults: any[];
 }
 
 const initialDB: DB = {
-  students: [
-    {
-      id: "S001",
-      email: "student@example.com",
-      password: bcrypt.hashSync("password123", 10),
-      name: "Demo Student",
-      phone: "1234567890",
-      registrationDate: new Date().toISOString(),
-      status: "Active",
-      role: "student",
-      targetExam: "CAT"
-    },
-    {
-      id: "A001",
-      email: "admin@example.com",
-      password: bcrypt.hashSync("admin123", 10),
-      name: "Admin User",
-      phone: "0987654321",
-      registrationDate: new Date().toISOString(),
-      status: "Active",
-      role: "admin",
-       targetExam: "ALL"
-    }
-  ],
+  students: [],
   courseMaterials: [
     {
       id: "CM001",
@@ -506,6 +489,39 @@ function toIdList(v: any): string[] {
 
 async function startServer() {
   const app = express();
+  app.set("trust proxy", 1);
+
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        reportOnly: true,
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+          fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
+          imgSrc: ["'self'", "data:", "https:"],
+          connectSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          baseUri: ["'self'"],
+          frameAncestors: ["'self'"],
+        },
+      },
+    })
+  );
+
+  app.use(
+    "/api/login",
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 30,
+      skipSuccessfulRequests: true,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { message: "Too many attempts. Please try again later." },
+    })
+  );
+
   app.use(express.json());
 
   // Auth Middleware
