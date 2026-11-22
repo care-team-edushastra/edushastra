@@ -815,32 +815,46 @@ function StatementGrid({
 }) {
   return (
     <div className="space-y-2">
-      {statements.map((s, idx) => (
-        <div key={s.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border">
-          <span className="text-sm flex-1">
-            <span className="font-bold text-muted-foreground mr-1">{idx + 1}.</span>
-            <Tex>{s.text}</Tex>
-          </span>
-          <div className="flex gap-1.5 shrink-0">
-            {(["Yes", "No"] as const).map((opt) => (
-              <button
-                key={opt}
-                disabled={disabled}
-                onClick={() => onSelect(s.id, opt)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition-colors ${
-                  values[s.id] === opt ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/40"
-                } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
-              >
-                {opt}
-              </button>
-            ))}
+      {statements.map((s, idx) => {
+        const picked = values[s.id];
+        return (
+          <div
+            key={s.id}
+            className={`flex items-center justify-between gap-3 p-3 rounded-xl border-2 transition-colors ${
+              picked ? "border-blue-200 bg-blue-50/50" : "border-border"
+            }`}
+          >
+            <span className="text-sm flex-1">
+              <span className="font-bold text-muted-foreground mr-1">{idx + 1}.</span>
+              <Tex>{s.text}</Tex>
+            </span>
+            <div className="flex gap-1.5 shrink-0">
+              {(["Yes", "No"] as const).map((opt) => {
+                const isSelected = picked === opt;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    disabled={disabled}
+                    aria-pressed={isSelected}
+                    onClick={() => onSelect(s.id, opt)}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold border-2 transition-colors ${
+                      isSelected
+                        ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                        : "bg-background border-border text-muted-foreground hover:border-blue-400 hover:bg-blue-50"
+                    } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
-
 function GraphicsBlanksSentence({
   text,
   blanks,
