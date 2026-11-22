@@ -758,18 +758,25 @@ function StatementGrid({
             {s.text}
           </span>
           <div className="flex gap-1.5 shrink-0">
-            {(["Yes", "No"] as const).map((opt) => (
-              <button
-                key={opt}
-                disabled={disabled}
-                onClick={() => onSelect(s.id, opt)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition-colors ${
-                  values[s.id] === opt ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/40"
-                } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
-              >
-                {opt}
-              </button>
-            ))}
+            {(["Yes", "No"] as const).map((opt) => {
+  const selected = values[s.id] === opt;
+  return (
+    <button
+      key={opt}
+      type="button"
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={() => onSelect(s.id, opt)}
+      className={`px-4 py-1.5 rounded-lg text-xs font-bold border-2 transition-colors ${
+        selected
+          ? "bg-blue-600 text-white border-blue-600 ring-2 ring-blue-200"
+          : "bg-background border-border text-muted-foreground hover:border-blue-400"
+      } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+    >
+      {opt}
+    </button>
+  );
+})}
           </div>
         </div>
       ))}
