@@ -8,25 +8,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
-  BookOpen,{(["Yes", "No"] as const).map((opt) => {
-  const selected = values[s.id] === opt;
-  return (
-    <button
-      key={opt}
-      type="button"
-      aria-pressed={selected}
-      disabled={disabled}
-      onClick={() => onSelect(s.id, opt)}
-      className={`px-4 py-1.5 rounded-lg text-xs font-bold border-2 transition-colors ${
-        selected
-          ? "bg-blue-600 text-white border-blue-600 ring-2 ring-blue-200"
-          : "bg-background border-border text-muted-foreground hover:border-blue-400"
-      } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
-    >
-      {opt}
-    </button>
-  );
-})}
+  BookOpen,
   BarChart3,
   ArrowLeft,
   Flag,
