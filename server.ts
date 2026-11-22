@@ -78,21 +78,17 @@ const SHEET_CONFIG: Record<string, string[]> = {
   MockPassages:   ["id", "title", "text", "targetExam"],
   MockResults:    ["id", "studentId", "testId", "totalScore", "overallScaledScore", "percentile", "sectionResults", "studentAnswers", "timeSpent", "submittedAt"],
   PYQPapers:      ["id", "name", "year", "slot", "examDate", "totalDurationMinutes", "sectionDurationMinutes", "questionIds", "passageIds", "targetExam", "publishedDate", "studentsAttempted"],
-PYQQuestions:   ["id", "section", "questionText", "questionType", "options", "correctAnswer", "answerTolerance", "explanation", "difficulty", "passageId", "targetExam"],
-PYQPassages:    ["id", "title", "text", "targetExam"],
-PYQResults:     ["id", "studentId", "paperId", "totalScore", "overallScaledScore", "percentile", "sectionResults", "studentAnswers", "timeSpent", "submittedAt"],
+  PYQQuestions:   ["id", "section", "questionText", "questionType", "options", "correctAnswer", "answerTolerance", "explanation", "difficulty", "passageId", "targetExam"],
+  PYQPassages:    ["id", "title", "text", "targetExam"],
+  PYQResults:     ["id", "studentId", "paperId", "totalScore", "overallScaledScore", "percentile", "sectionResults", "studentAnswers", "timeSpent", "submittedAt"],
   Announcements: ["id", "title", "content", "createdDate", "createdBy", "targetExam"],
 
-  // ── GMAT sectional tests (live in GMAT_SPREADSHEET_ID) ──
-  // Question/stimulus columns are wider than the CAT ones: GMAT question types
-  // (table analysis, graphics interpretation, two-part, MSR) need extra fields.
   GmatSectionalTests:     ["id", "name", "section", "durationMinutes", "questionIds", "passageIds", "targetExam", "publishedDate"],
-  GmatSectionalQuestions: ["id", "section", "questionText", "questionType", "options", "correctAnswer", "statements", "blanks", "twoPartOptions", "correctPart1", "correctPart2", "explanation", "difficulty", "passageId", "targetExam"],
-  GmatSectionalPassages:  ["id", "title", "kind", "text", "table", "chartImageUrl", "tabs", "targetExam"],
-  // ── GMAT full-length mock tests (also live in GMAT_SPREADSHEET_ID) ──
+  GmatSectionalQuestions: ["id", "section", "questionType", "questionText", "options", "correctAnswer", "typeData", "explanation", "difficulty", "passageId", "targetExam"],
+  GmatSectionalPassages:  ["id", "title", "kind", "text", "data", "chartImageUrl", "targetExam"],
   GmatMockTests:     ["id", "name", "description", "totalDurationMinutes", "sectionDurationMinutes", "questionIds", "passageIds", "targetExam", "publishedDate", "studentsAttempted"],
-  GmatMockQuestions: ["id", "section", "questionText", "questionType", "options", "correctAnswer", "statements", "blanks", "twoPartOptions", "correctPart1", "correctPart2", "explanation", "difficulty", "passageId", "targetExam"],
-  GmatMockPassages:  ["id", "title", "kind", "text", "table", "chartImageUrl", "tabs", "targetExam"],
+  GmatMockQuestions: ["id", "section", "questionType", "questionText", "options", "correctAnswer", "typeData", "explanation", "difficulty", "passageId", "targetExam"],
+  GmatMockPassages:  ["id", "title", "kind", "text", "data", "chartImageUrl", "targetExam"],
   GmatMockResults:   ["id", "studentId", "testId", "totalScore", "overallScaledScore", "percentile", "sectionResults", "studentAnswers", "sectionOrder", "timeSpent", "submittedAt"],
 
   GmatSectionalResults:   ["id", "studentId", "testId", "section", "totalScore", "correctAnswers", "wrongAnswers", "skippedQuestions", "timeSpent", "studentAnswers", "scaledScore", "editsUsed", "reachedReview", "submittedAt"]
@@ -105,6 +101,172 @@ PYQResults:     ["id", "studentId", "paperId", "totalScore", "overallScaledScore
 function normalizeKey(str: string): string {
   if (!str) return "";
   return str.toLowerCase().replace(/[\s_\-]/g, "");
+}
+
+const SECTIONAL_JSON_FIELDS = ["options", "typeData", "data"];
+const SECTIONAL_OBJECT_FIELDS = ["typeData"];
+
+
+function parseSheetJson(raw: string, label: string): any {
+  const s = String(raw ?? "").trim();
+  const attempts = [
+    s,
+    s.replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'"),
+    s.replace(/[\u201C\u201D]/g, '"').replace(/\r?\n/g, "\\n").replace(/\t/g, "\\t"),
+  ];
+  for (const a of attempts) {
+    try { return JSON.parse(a); } catch { /* try the next repair */ }
+  }
+  console.error(`⚠️  JSON.parse failed for ${label} (row will use empty default). Raw value (first 200 chars): ${s.slice(0, 200)}`);
+  return undefined;
+}
+
+const isBlankVal = (v: any) =>
+  v === undefined || v === null || (typeof v === "string" && !v.trim()) || (Array.isArray(v) && v.length === 0);
+
+// Older rows may still have the previous flat columns; they only fill gaps the blob leaves.
+const LEGACY_QUESTION_COLUMNS = ["statements", "blanks", "twoPartOptions", "correctPart1", "correctPart2"];
+const LEGACY_PASSAGE_COLUMNS = ["table", "tabs"];
+const LEGACY_JSON_COLUMNS = ["statements", "blanks", "table", "tabs"]; // parsed server-side; unparseable -> omitted
+
+const PACKED_QUESTION_RANGES = ["GmatSectionalQuestions", "GmatMockQuestions"];
+const PACKED_PASSAGE_RANGES = ["GmatSectionalPassages", "GmatMockPassages"];
+
+// "Quant" | "Verbal" | "DataInsights" from whatever is typed in the sheet
+function normalizeSectionCell(v: any): string {
+  const t = String(v ?? "").toLowerCase().replace(/[\s_\-]/g, "");
+  return t.includes("quant") || t === "qr" || t === "qa" ? "Quant"
+    : t.includes("verbal") || t === "vr" || t.includes("varc") ? "Verbal"
+    : "DataInsights";
+}
+
+// options / twoPartOptions: a JSON array OR one option per line -> string[]
+function toOptionList(v: any): string[] {
+  if (Array.isArray(v)) return v.map((x) => String(x));
+  const cell = String(v ?? "").trim();
+  if (!cell) return [];
+  if (cell.startsWith("[")) {
+    const arr = parseSheetJson(cell, "an options list");
+    if (Array.isArray(arr)) return arr.map((x: any) => String(x));
+  }
+  return cell.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+}
+
+function mapPackedSectionalRows(range: string, headers: string[], dataRows: any[][], expectedKeys: string[]) {
+  const isMock = range.startsWith("GmatMock");
+  const col = (row: any[], name: string) => {
+    const i = headers.indexOf(normalizeKey(name));
+    return i === -1 ? undefined : row[i];
+  };
+  // legacy flat column -> value to use (JSON-ish columns are parsed, bad ones are dropped)
+  const legacyValue = (k: string, raw: any) => {
+    if (!LEGACY_JSON_COLUMNS.includes(k)) return raw;
+    const t = typeof raw === "string" ? raw.trim() : "";
+    if (!(t.startsWith("[") || t.startsWith("{"))) return undefined;
+    return parseSheetJson(t, `legacy column "${k}" in sheet "${range}"`);
+  };
+
+  return dataRows.map((row) => {
+    const obj: any = {};
+    expectedKeys.forEach((key) => {
+      const index = headers.indexOf(normalizeKey(key));
+      const emptyDefault = SECTIONAL_OBJECT_FIELDS.includes(key) ? {} : [];
+      let val: any = index !== -1 ? row[index] || "" : "";
+      if (SECTIONAL_JSON_FIELDS.includes(key)) {
+        if (typeof val === "string" && (val.trim().startsWith("[") || val.trim().startsWith("{"))) {
+          const parsed = parseSheetJson(val, `column "${key}" in sheet "${range}" (row id "${String(row[headers.indexOf("id")] ?? "?").trim()}")`);
+          val = parsed === undefined ? emptyDefault : parsed;
+        } else if (val === "") {
+          val = emptyDefault;
+        }
+      }
+      obj[key] = val;
+    });
+   
+    if (typeof obj.id === "string") obj.id = obj.id.trim();
+    if (typeof obj.passageId === "string") obj.passageId = obj.passageId.trim();
+
+    if (PACKED_QUESTION_RANGES.includes(range)) {
+      const { typeData, ...rest } = obj;
+      const flat: any = typeData && typeof typeData === "object" && !Array.isArray(typeData) ? { ...rest, ...typeData } : rest;
+      for (const k of LEGACY_QUESTION_COLUMNS) {
+        if (!isBlankVal(flat[k])) continue;
+        const legacy = legacyValue(k, col(row, k));
+        if (!isBlankVal(legacy)) flat[k] = legacy;
+      }
+      if (isMock) {
+        // mock clients expect clean lists and a canonical section name
+        flat.section = normalizeSectionCell(flat.section);
+        flat.options = toOptionList(flat.options);
+        flat.twoPartOptions = toOptionList(flat.twoPartOptions);
+      }
+      return flat;
+    }
+
+    // passages
+    const { data, ...rest } = obj;
+    const kind = String(obj.kind || "").trim().toLowerCase();
+    if (kind === "table" || kind === "tabs") {
+      if (isBlankVal(data)) console.warn(`⚠️  ${range} row "${obj.id}" has kind="${kind}" but empty/missing "data" column.`);
+      else rest[kind] = data;
+    }
+    for (const k of LEGACY_PASSAGE_COLUMNS) {
+      if (!isBlankVal(rest[k])) continue;
+      const legacy = legacyValue(k, col(row, k));
+      if (!isBlankVal(legacy)) rest[k] = legacy;
+    }
+    return rest;
+  });
+}
+
+// Question as written to the sheet (flat -> packed)
+function packGmatQuestionForSheet(q: any, id: string) {
+  return {
+    id,
+    section: q.section,
+    questionType: q.questionType,
+    questionText: q.questionText,
+    options: q.options || [],
+    correctAnswer: q.correctAnswer ?? "",
+    typeData: {
+      statements: q.statements,
+      blanks: q.blanks,
+      twoPartOptions: q.twoPartOptions,
+      correctPart1: q.correctPart1,
+      correctPart2: q.correctPart2,
+    },
+    explanation: q.explanation,
+    difficulty: q.difficulty,
+    passageId: q.passageId ?? "",
+    targetExam: q.targetExam || "GMAT",
+  };
+}
+
+// Local-DB fallback must mirror what the unpacking step above produces
+function flattenGmatQuestion(packed: any) {
+  const { typeData, ...rest } = packed;
+  return { ...rest, ...(typeData || {}) };
+}
+
+// Passage as written to the sheet (table/tabs -> "data")
+function packGmatPassageForSheet(body: any, id: string) {
+  const kind = String(body.kind || "").trim().toLowerCase();
+  const sheetData = kind === "table" ? body.table : kind === "tabs" ? body.tabs : undefined;
+  return {
+    id,
+    title: body.title,
+    kind: body.kind,
+    text: body.text ?? "",
+    data: sheetData,
+    chartImageUrl: body.chartImageUrl ?? "",
+    targetExam: body.targetExam || "GMAT",
+  };
+}
+
+function flattenGmatPassage(packed: any) {
+  const { data, ...rest } = packed;
+  const kind = String(packed.kind || "").trim().toLowerCase();
+  return kind === "table" ? { ...rest, table: data } : kind === "tabs" ? { ...rest, tabs: data } : rest;
 }
 
 const GMAT_MOCK_JSON_FIELDS = ["statements", "blanks", "table", "tabs", "sectionResults", "sectionOrder"];
@@ -134,6 +296,11 @@ async function fetchSheetData(range: string, spreadsheetId: string | undefined =
 
     console.log(`✅ Mapping ${dataRows.length} rows from ${range} using normalized headers: [${headers.join(", ")}]`);
 
+    // Sectional + mock questions / passages use the same packed layout as the CAT sheets
+    if (PACKED_QUESTION_RANGES.includes(range) || PACKED_PASSAGE_RANGES.includes(range)) {
+      return mapPackedSectionalRows(range, headers, dataRows, expectedKeys);
+    }
+
     return dataRows.map(row => {
       const obj: any = {};
       expectedKeys.forEach(key => {
@@ -142,23 +309,7 @@ async function fetchSheetData(range: string, spreadsheetId: string | undefined =
           const gi = headers.indexOf(normalizeKey(key));
           const cell = gi !== -1 ? String(row[gi] ?? "").trim() : "";
           if (key === "id" || key === "passageId") { obj[key] = cell; return; }
-          if (range === "GmatMockQuestions" && key === "section") {
-            const v = cell.toLowerCase().replace(/[\s_\-]/g, "");
-            obj[key] = v.includes("quant") || v === "qr" || v === "qa" ? "Quant"
-              : v.includes("verbal") || v === "vr" || v.includes("varc") ? "Verbal"
-              : "DataInsights";
-            return;
-          }
-          // options / twoPartOptions: JSON array OR one option per line
-          if (key === "options" || key === "twoPartOptions") {
-            let list: string[] = [];
-            if (cell.startsWith("[")) {
-              try { const arr = JSON.parse(cell); if (Array.isArray(arr)) list = arr.map((x: any) => String(x)); } catch { /* fall through */ }
-            }
-            if (!list.length && cell) list = cell.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
-            obj[key] = list;
-            return;
-          }
+          // (GmatMockQuestions / GmatMockPassages are handled by mapPackedSectionalRows above)
         }
         // GMAT mock sheets: structured columns (statements, blanks, table, tabs,
         // sectionResults, …) are stored as JSON text and handed to the client as
@@ -1618,14 +1769,10 @@ app.post("/api/gmat-sectional-questions", authenticateToken, async (req: any, re
   try {
     const questions: any[] = req.body.questions;
     for (const q of questions) {
-      // questionType is passed through untouched (standard_mcq, table_analysis, …)
-      const newQ = {
-        ...q,
-        id: q.id || `GSQ${Date.now()}${Math.random().toString(36).substr(2, 4)}`,
-      };
+      const newQ = packGmatQuestionForSheet(q, q.id || `GSQ${Date.now()}${Math.random().toString(36).substr(2, 4)}`);
       await appendSheetData("GmatSectionalQuestions", newQ, GMAT_SPREADSHEET_ID);
       const db = getLocalDB();
-      db.gmatSectionalQuestions.push(newQ);
+      db.gmatSectionalQuestions.push(flattenGmatQuestion(newQ)); // local fallback keeps the unpacked shape
       saveLocalDB(db);
     }
     res.json({ success: true });
@@ -1638,10 +1785,11 @@ app.post("/api/gmat-sectional-questions", authenticateToken, async (req: any, re
 app.post("/api/gmat-sectional-passages", authenticateToken, async (req: any, res) => {
   if (req.user.role !== "admin") return res.sendStatus(403);
   try {
-    const passage = { ...req.body, id: req.body.id || `GSP${Date.now()}` };
+    // Packed exactly like /api/sectional-passages: table / tabs go into the "data" column
+    const passage = packGmatPassageForSheet(req.body, req.body.id || `GSP${Date.now()}`);
     await appendSheetData("GmatSectionalPassages", passage, GMAT_SPREADSHEET_ID);
     const db = getLocalDB();
-    db.gmatSectionalPassages.push(passage);
+    db.gmatSectionalPassages.push(flattenGmatPassage(passage)); // local fallback keeps the unpacked shape
     saveLocalDB(db);
     res.json({ success: true, passageId: passage.id });
   } catch (err: any) {
@@ -1807,13 +1955,10 @@ app.post("/api/gmat-mock-questions", authenticateToken, async (req: any, res) =>
   try {
     const questions: any[] = req.body.questions;
     for (const q of questions) {
-      const newQ = {
-        ...q,
-        id: q.id || `GMQ${Date.now()}${Math.random().toString(36).substr(2, 4)}`,
-      };
+      const newQ = packGmatQuestionForSheet(q, q.id || `GMQ${Date.now()}${Math.random().toString(36).substr(2, 4)}`);
       await appendSheetData("GmatMockQuestions", newQ, GMAT_SPREADSHEET_ID);
       const db = getLocalDB();
-      db.gmatMockQuestions.push(newQ);
+      db.gmatMockQuestions.push(flattenGmatQuestion(newQ)); // local fallback keeps the unpacked shape
       saveLocalDB(db);
     }
     res.json({ success: true });
@@ -1826,10 +1971,11 @@ app.post("/api/gmat-mock-questions", authenticateToken, async (req: any, res) =>
 app.post("/api/gmat-mock-passages", authenticateToken, async (req: any, res) => {
   if (req.user.role !== "admin") return res.sendStatus(403);
   try {
-    const passage = { ...req.body, id: req.body.id || `GMP${Date.now()}` };
+    // Packed exactly like /api/gmat-sectional-passages: table / tabs go into the "data" column
+    const passage = packGmatPassageForSheet(req.body, req.body.id || `GMP${Date.now()}`);
     await appendSheetData("GmatMockPassages", passage, GMAT_SPREADSHEET_ID);
     const db = getLocalDB();
-    db.gmatMockPassages.push(passage);
+    db.gmatMockPassages.push(flattenGmatPassage(passage)); // local fallback keeps the unpacked shape
     saveLocalDB(db);
     res.json({ success: true, passageId: passage.id });
   } catch (err: any) {
